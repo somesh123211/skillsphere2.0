@@ -22,6 +22,8 @@ import uuid
 import smtplib
 from email.mime.text import MIMEText
 import google.generativeai as genai
+from google.ai import generativelanguage_v1beta as glm
+from google.api_core.client_options import ClientOptions
 from db import get_db
 
 
@@ -46,6 +48,18 @@ if not GOOGLE_API_KEY:
     raise RuntimeError("GOOGLE_API_KEY not found in .env")
 
 genai.configure(api_key=GOOGLE_API_KEY)
+
+# Load rotation keys
+GEMINI_KEYS = [
+    os.getenv("GOOGLE_API_KEY_1"),
+    os.getenv("GOOGLE_API_KEY_2"),
+    os.getenv("GOOGLE_API_KEY_3"),
+    os.getenv("GOOGLE_API_KEY_4"),
+    os.getenv("GOOGLE_API_KEY_5")
+]
+GEMINI_KEYS = [k for k in GEMINI_KEYS if k]
+if not GEMINI_KEYS:
+    GEMINI_KEYS = [GOOGLE_API_KEY]
 
 MYSQL_CONFIG = {
     "host": os.getenv("MYSQL_HOST"),
@@ -827,7 +841,13 @@ Format:
 
 def generate_mcqs_from_ai(topics, difficulty):
     try:
+        # Rotate keys dynamically and thread-safely
+        selected_key = random.choice(GEMINI_KEYS)
+        client_opts = ClientOptions(api_key=selected_key)
+        my_client = glm.GenerativeServiceClient(client_options=client_opts)
+        
         model = genai.GenerativeModel("gemini-2.5-flash")
+        model._client = my_client
 
         prompt = build_daily_mcq_prompt(topics, difficulty)
 
