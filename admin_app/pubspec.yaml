@@ -1,0 +1,46 @@
+name: placement_portal
+description: A Flutter app for placement preparation.
+
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+
+ 
+
+  http: ^1.1.0
+  cupertino_icons: ^1.0.2
+  fl_chart: ^0.66.1
+  google_fonts: ^6.1.0
+  pdf: ^3.10.6
+  printing: ^5.11.0
+
+  dio: ^5.9.0
+  cookie_jar: ^4.0.8
+  dio_cookie_manager: ^3.3.0
+
+  shared_preferences: ^2.5.3
+  image_picker: ^1.1.1
+  file_picker: ^8.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  flutter_launcher_icons: ^0.13.1
+
+flutter:
+  uses-material-design: true
+
+flutter_icons:
+  android: true
+  ios: false
+  image_path: "assets/logo.png"
+
