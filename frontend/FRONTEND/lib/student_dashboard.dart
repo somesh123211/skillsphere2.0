@@ -29,7 +29,7 @@ class _StudentDashboardState extends State<StudentDashboard>
   // ================= LOGIC (STRICTLY PRESERVED) =================
 
   // NOTE: If using Android Emulator, change to "http://10.0.2.2:5000"
-  final String baseUrl = "http://localhost:5000";
+  final String baseUrl = "https://skillsphere2-0.onrender.com";
 
   bool loadingProfile = true;
   bool loadingTodayQuiz = true;

@@ -41,7 +41,7 @@ class SplashGate extends StatefulWidget {
 }
 
 class _SplashGateState extends State<SplashGate> {
-  final String baseUrl = "http://localhost:5000";
+  final String baseUrl = "https://skillsphere2-0.onrender.com";
 
   @override
   void initState() {

@@ -18,7 +18,7 @@ class TodayQuizzesListPage extends StatefulWidget {
 }
 
 class _TodayQuizzesListPageState extends State<TodayQuizzesListPage> {
-  final String baseUrl = "http://localhost:5000";
+  final String baseUrl = "https://skillsphere2-0.onrender.com";
 
   bool loading = true;
   String? error;

@@ -46,7 +46,7 @@ class _DailyQuizSingleStudentPageState
   // =================================================
   // BASE URL
   // =================================================
-  final String baseUrl = "http://localhost:5000";
+  final String baseUrl = "https://skillsphere2-0.onrender.com";
 
   // =================================================
   // STATE

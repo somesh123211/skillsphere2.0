@@ -42,7 +42,7 @@ class FacultyQuizWiseMarksPage extends StatefulWidget {
 }
 
 class _FacultyQuizWiseMarksPageState extends State<FacultyQuizWiseMarksPage> {
-  final String baseUrl = "http://localhost:5000";
+  final String baseUrl = "https://skillsphere2-0.onrender.com";
 
   DateTime selectedDate = DateTime.now();
   int year = 2;

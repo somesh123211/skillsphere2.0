@@ -19,7 +19,7 @@ class _LeaderboardPageState extends State<LeaderboardPage>
   // ==========================================
 
   // NOTE: Use 10.0.2.2 for Android Emulator
-  final String baseUrl = "http://localhost:5000";
+  final String baseUrl = "https://skillsphere2-0.onrender.com";
 
   bool loading = true;
   List leaderboard = [];

@@ -21,7 +21,7 @@ class DepartmentDetailPage extends StatefulWidget {
 }
 
 class _DepartmentDetailPageState extends State<DepartmentDetailPage> {
-  final String baseUrl = "http://localhost:5000";
+  final String baseUrl = "https://skillsphere2-0.onrender.com";
   bool loading = true;
   List staff = [];
 

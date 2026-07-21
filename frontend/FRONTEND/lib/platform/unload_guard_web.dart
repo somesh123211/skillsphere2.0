@@ -1,24 +1,33 @@
 import 'dart:async';
 import 'dart:html' as html;
 
-// Shows the browser's native "leave site?" confirmation when a student
-// tries to close the tab/refresh/navigate away while a quiz is active -
-// the "1st warning" before they actually leave. Modern browsers show their
-// own fixed wording regardless of what's set here; setting returnValue is
-// what triggers that native dialog at all.
 class UnloadGuard {
   static StreamSubscription<html.Event>? _sub;
+  static StreamSubscription<html.Event>? _blurSub;
+  static StreamSubscription<html.Event>? _visSub;
 
-  static void enable() {
-    if (_sub != null) return;
-    _sub = html.window.onBeforeUnload.listen((event) {
-      final e = event as html.BeforeUnloadEvent;
-      e.returnValue = '';
-    });
+  static void enable({Function()? onLeft}) {
+    if (_sub == null) {
+      _sub = html.window.onBeforeUnload.listen((event) {
+        final e = event as html.BeforeUnloadEvent;
+        e.returnValue = '';
+      });
+    }
+    if (_visSub == null && onLeft != null) {
+      _visSub = html.document.onVisibilityChange.listen((_) {
+        if (html.document.visibilityState == 'hidden') {
+          onLeft();
+        }
+      });
+    }
   }
 
   static void disable() {
     _sub?.cancel();
     _sub = null;
+    _blurSub?.cancel();
+    _blurSub = null;
+    _visSub?.cancel();
+    _visSub = null;
   }
 }

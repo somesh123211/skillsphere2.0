@@ -37,7 +37,7 @@ class AddFacultyQuizPage extends StatefulWidget {
 }
 
 class _AddFacultyQuizPageState extends State<AddFacultyQuizPage> {
-  final String baseUrl = "http://localhost:5000";
+  final String baseUrl = "https://skillsphere2-0.onrender.com";
 
   final TextEditingController nameController = TextEditingController();
   final TextEditingController durationController =

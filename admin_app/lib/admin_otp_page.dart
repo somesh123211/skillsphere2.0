@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 
 import 'dashboard_page.dart';
 import 'admin_session.dart';
+import 'admin_session_storage.dart';
 
 // --- AURUM THEME COLORS ---
 class AurumColors {
@@ -35,7 +36,7 @@ class _AdminOtpPageState extends State<AdminOtpPage> {
   final otpCtrl = TextEditingController();
   bool loading = false;
 
-  final String baseUrl = "http://localhost:5000";
+  final String baseUrl = "https://skillsphere2-0.onrender.com";
 
   Future<void> verifyOtp() async {
     if (otpCtrl.text.length != 6) {
@@ -63,6 +64,7 @@ class _AdminOtpPageState extends State<AdminOtpPage> {
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 200 && data["success"] == true) {
+        await AdminSessionStorage.saveSession(data["token"], data["admin"]);
         if (!mounted) return;
         Navigator.pushReplacement(
           context,

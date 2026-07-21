@@ -44,7 +44,7 @@ class AdminLeaderboardPage extends StatefulWidget {
 }
 
 class _AdminLeaderboardPageState extends State<AdminLeaderboardPage> {
-  final String baseUrl = "http://localhost:5000";
+  final String baseUrl = "https://skillsphere2-0.onrender.com";
 
   int year = 2;
   String type = "all"; // all | month

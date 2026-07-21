@@ -27,7 +27,7 @@ class ForgotPasswordPage extends StatefulWidget {
 
 class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   final emailCtrl = TextEditingController();
-  final baseUrl = "http://localhost:5000"; // Updated to match your Login Page config
+  final baseUrl = "https://skillsphere2-0.onrender.com"; // Updated to match your Login Page config
 
   Future<void> sendOtp() async {
     // Basic validation to prevent empty calls

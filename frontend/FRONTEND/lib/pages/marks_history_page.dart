@@ -17,7 +17,7 @@ class _MarksHistoryPageState extends State<MarksHistoryPage> {
   // ==========================================
 
   // NOTE: Use 10.0.2.2 for Android Emulator, 127.0.0.1 for Web
-  final String baseUrl = "http://localhost:5000";
+  final String baseUrl = "https://skillsphere2-0.onrender.com";
 
   bool loading = true;
   List<Map<String, dynamic>> history = [];

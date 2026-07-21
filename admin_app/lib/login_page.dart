@@ -6,6 +6,7 @@ import 'admin_otp_page.dart';
 import 'forgot_password_page.dart';
 import 'dashboard_page.dart';
 import 'admin_session.dart';
+import 'admin_session_storage.dart';
 
 // --- AURUM THEME COLORS ---
 class AurumColors {
@@ -35,7 +36,7 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController emailCtrl = TextEditingController();
   final TextEditingController passCtrl = TextEditingController();
 
-  final String baseUrl = "http://localhost:5000";
+  final String baseUrl = "https://skillsphere2-0.onrender.com";
   bool loading = false;
 
   bool _obscurePassword = true;
@@ -82,6 +83,7 @@ class _LoginPageState extends State<LoginPage> {
 
       // DIRECT LOGIN
       if (response.statusCode == 200 && data.containsKey("token")) {
+        await AdminSessionStorage.saveSession(data["token"], data["admin"]);
         setState(() => loading = false);
 
         Navigator.pushReplacement(

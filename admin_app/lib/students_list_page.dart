@@ -43,7 +43,7 @@ class StudentsListPage extends StatefulWidget {
 }
 
 class _StudentsListPageState extends State<StudentsListPage> {
-  final String baseUrl = "http://localhost:5000";
+  final String baseUrl = "https://skillsphere2-0.onrender.com";
 
   int selectedYear = 2;
   bool loading = false;

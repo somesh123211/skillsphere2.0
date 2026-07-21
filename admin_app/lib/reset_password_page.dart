@@ -32,7 +32,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
   final passCtrl = TextEditingController();
   final confirmCtrl = TextEditingController();
 
-  final baseUrl = "http://localhost:5000";
+  final baseUrl = "https://skillsphere2-0.onrender.com";
 
   bool loading = false;
 

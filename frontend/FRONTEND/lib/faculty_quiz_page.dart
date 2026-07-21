@@ -21,7 +21,7 @@ class FacultyQuizPage extends StatefulWidget {
 }
 
 class _FacultyQuizPageState extends State<FacultyQuizPage> with WidgetsBindingObserver {
-  final String baseUrl = "http://localhost:5000";
+  final String baseUrl = "https://skillsphere2-0.onrender.com";
 
   bool loading = true;
   bool submitting = false;
@@ -40,6 +40,8 @@ class _FacultyQuizPageState extends State<FacultyQuizPage> with WidgetsBindingOb
 
   // ================= INIT =================
   bool _wasBackgrounded = false;
+  int _warningCount = 0;
+  static const int _maxWarnings = 2;
 
   @override
   void initState() {
@@ -58,16 +60,10 @@ class _FacultyQuizPageState extends State<FacultyQuizPage> with WidgetsBindingOb
     super.dispose();
   }
 
-  // See daily_quiz_page.dart's identical method for why this exists: OS-level
-  // backgrounding (Home button, app switcher, lock screen) can't be
-  // intercepted or warned-about beforehand on a native app - this is the
-  // "1st warning" for that case, shown when the student returns. The actual
-  // guarantee of eventual submission comes from the server-side sweep
-  // (auto_finalize_abandoned_faculty_quizzes), not this dialog.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (quizFinished) return;
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.detached || state == AppLifecycleState.inactive) {
       _wasBackgrounded = true;
     } else if (state == AppLifecycleState.resumed && _wasBackgrounded) {
       _wasBackgrounded = false;
@@ -77,15 +73,42 @@ class _FacultyQuizPageState extends State<FacultyQuizPage> with WidgetsBindingOb
 
   void _showBackgroundWarning() {
     if (!mounted || quizFinished) return;
+    _warningCount++;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || quizFinished) return;
+
+      if (_warningCount >= _maxWarnings) {
+        submitFacultyQuiz(auto: true);
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => AlertDialog(
+            title: const Text("Quiz Auto-Submitted"),
+            content: const Text(
+              "You left or switched away from the quiz multiple times. "
+              "Your answers so far have been automatically submitted.",
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                  Navigator.pop(context);
+                },
+                child: const Text("OK"),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+
       showDialog(
         context: context,
         builder: (_) => AlertDialog(
-          title: const Text("Warning"),
-          content: const Text(
-            "You left the quiz. Your answers so far are saved, but leaving "
-            "again may cause the quiz to be auto-submitted before you're done.",
+          title: Text("Warning ($_warningCount/$_maxWarnings)"),
+          content: Text(
+            "You left or switched away from the quiz. Your answers so far are saved.\n\n"
+            "Leaving again will cause your quiz to be automatically submitted!",
           ),
           actions: [
             TextButton(
@@ -159,7 +182,9 @@ class _FacultyQuizPageState extends State<FacultyQuizPage> with WidgetsBindingOb
         });
         startCountdown();
         requestFullscreen();
-        UnloadGuard.enable();
+        UnloadGuard.enable(onLeft: () {
+          _wasBackgrounded = true;
+        });
         SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
       } else {
         setState(() => loading = false);

@@ -30,7 +30,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   bool _showPass = false;
   bool _showConfirm = false;
 
-  final baseUrl = "http://localhost:5000";
+  final baseUrl = "https://skillsphere2-0.onrender.com";
 
   void showMsg(String msg, {bool isError = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
