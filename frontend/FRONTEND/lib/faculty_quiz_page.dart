@@ -1,7 +1,10 @@
 import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'platform/fullscreen.dart';
+import 'platform/unload_guard.dart';
 
 class FacultyQuizPage extends StatefulWidget {
   final String token;
@@ -17,7 +20,7 @@ class FacultyQuizPage extends StatefulWidget {
   State<FacultyQuizPage> createState() => _FacultyQuizPageState();
 }
 
-class _FacultyQuizPageState extends State<FacultyQuizPage> {
+class _FacultyQuizPageState extends State<FacultyQuizPage> with WidgetsBindingObserver {
   final String baseUrl = "http://localhost:5000";
 
   bool loading = true;
@@ -36,16 +39,63 @@ class _FacultyQuizPageState extends State<FacultyQuizPage> {
   Timer? countdownTimer;
 
   // ================= INIT =================
+  bool _wasBackgrounded = false;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     fetchFacultyQuiz();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     countdownTimer?.cancel();
+    UnloadGuard.disable();
+    exitFullscreen();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
+  }
+
+  // See daily_quiz_page.dart's identical method for why this exists: OS-level
+  // backgrounding (Home button, app switcher, lock screen) can't be
+  // intercepted or warned-about beforehand on a native app - this is the
+  // "1st warning" for that case, shown when the student returns. The actual
+  // guarantee of eventual submission comes from the server-side sweep
+  // (auto_finalize_abandoned_faculty_quizzes), not this dialog.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (quizFinished) return;
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
+      _wasBackgrounded = true;
+    } else if (state == AppLifecycleState.resumed && _wasBackgrounded) {
+      _wasBackgrounded = false;
+      _showBackgroundWarning();
+    }
+  }
+
+  void _showBackgroundWarning() {
+    if (!mounted || quizFinished) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || quizFinished) return;
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text("Warning"),
+          content: const Text(
+            "You left the quiz. Your answers so far are saved, but leaving "
+            "again may cause the quiz to be auto-submitted before you're done.",
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text("OK, I understand"),
+            ),
+          ],
+        ),
+      );
+    });
   }
 
   // ================= TIMER =================
@@ -108,6 +158,9 @@ class _FacultyQuizPageState extends State<FacultyQuizPage> {
           loading = false;
         });
         startCountdown();
+        requestFullscreen();
+        UnloadGuard.enable();
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
       } else {
         setState(() => loading = false);
         _showErrorDialog(data["message"] ?? data["error"] ?? "Failed to load quiz");
@@ -192,6 +245,9 @@ class _FacultyQuizPageState extends State<FacultyQuizPage> {
 
     setState(() => submitting = true);
     countdownTimer?.cancel();
+    UnloadGuard.disable();
+    exitFullscreen();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 
     try {
       final payload = {

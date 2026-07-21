@@ -26,6 +26,12 @@ import io
 import traceback
 import smtplib
 from email.mime.text import MIMEText
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.units import mm
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.pdfgen import canvas
 
 # ------------------------------------------------------------
 # Local TLS trust fix: on machines where an antivirus (e.g. Avast/AVG)
@@ -876,6 +882,12 @@ def send_email_smtp(to_email, subject, html_body):
 
 
 def send_email_with_attachment(to_email, subject, html_body, attachment_bytes, filename):
+    return send_email_with_attachments(to_email, subject, html_body, [(attachment_bytes, filename)])
+
+
+def send_email_with_attachments(to_email, subject, html_body, attachments):
+    # attachments: list of (bytes, filename) tuples - Brevo's API already
+    # accepts a list here, one email can carry several files.
     api_key = os.getenv("BREVO_API_KEY") or os.getenv("ADMIN_KEY")
     if not api_key:
         raise Exception("BREVO_API_KEY or ADMIN_KEY not set")
@@ -890,10 +902,10 @@ def send_email_with_attachment(to_email, subject, html_body, attachment_bytes, f
         "to": [{"email": to_email}],
         "subject": subject,
         "htmlContent": html_body,
-        "attachment": [{
-            "content": base64.b64encode(attachment_bytes).decode("utf-8"),
-            "name": filename
-        }]
+        "attachment": [
+            {"content": base64.b64encode(data).decode("utf-8"), "name": filename}
+            for data, filename in attachments
+        ]
     }
 
     headers = {
@@ -5476,6 +5488,193 @@ def recover_interrupted_daily_quizzes():
 # just gets caught on the next check - nothing needs to fire at an exact
 # moment.
 
+# Same palette/text as the admin app's Full Class Report PDF
+# (admin_app/lib/daily_quiz_full_class_page.dart generatePdf()) so the
+# emailed report looks identical to the one the app itself can export.
+_PDF_NAVY = colors.HexColor("#1E293B")
+_PDF_LIGHT_BG = colors.HexColor("#F8FAFC")
+_PDF_BORDER_GREY = colors.HexColor("#E2E8F0")
+_PDF_BLUE = colors.HexColor("#2563EB")
+_PDF_TEXT_DARK = colors.HexColor("#0F172A")
+_PDF_GREY400 = colors.HexColor("#BDBDBD")
+_PDF_GREY600 = colors.HexColor("#757575")
+_PDF_GREY700 = colors.HexColor("#616161")
+_PDF_GREY300 = colors.HexColor("#E0E0E0")
+_PDF_AMBER300 = colors.HexColor("#FFD54F")
+
+# Mirrors resolveDepartmentName() in daily_quiz_full_class_page.dart exactly,
+# so "AI" in the DB renders as the same full name the app shows.
+_PDF_DEPT_FULL_NAMES = {
+    "AI": "Artificial Intelligence",
+    "DS": "Computer Science & Engineering (Data Science)",
+    "CSE": "Computer Science & Engineering",
+    "IT": "Information Technology",
+    "ETC": "Electronics & Telecommunication",
+    "MECH": "Mechanical Engineering",
+    "CIVIL": "Civil Engineering",
+    "EE": "Electrical Engineering",
+    "CS-CY": "Computer Science & Engineering (Cyber Security)",
+    "CSBS": "Computer Science & Business Systems",
+    "IIOT": "Industrial Internet of Things",
+    "RAI": "Robotics & Artificial Intelligence",
+}
+
+
+def _pdf_resolve_dept_name(code):
+    if not code or not str(code).strip():
+        return "Artificial Intelligence"
+    return _PDF_DEPT_FULL_NAMES.get(str(code).strip().upper(), code)
+
+
+class _ReportCanvas(canvas.Canvas):
+    # Two-pass canvas so the footer can show "Page X of Y" - reportlab only
+    # knows the total page count once every page has already been drawn.
+    def __init__(self, *args, **kwargs):
+        self._report_meta = kwargs.pop("report_meta")
+        canvas.Canvas.__init__(self, *args, **kwargs)
+        self._saved_page_states = []
+
+    def showPage(self):
+        self._saved_page_states.append(dict(self.__dict__))
+        self._startPage()
+
+    def save(self):
+        total_pages = len(self._saved_page_states)
+        for state in self._saved_page_states:
+            self.__dict__.update(state)
+            self._draw_chrome(total_pages)
+            canvas.Canvas.showPage(self)
+        canvas.Canvas.save(self)
+
+    def _draw_chrome(self, total_pages):
+        meta = self._report_meta
+        page_w, page_h = A4
+        margin = 16 * mm
+        self.saveState()
+
+        header_h = 15 * mm
+        header_y = page_h - margin - header_h
+        self.setFillColor(_PDF_NAVY)
+        self.roundRect(margin, header_y, page_w - 2 * margin, header_h, 4, fill=1, stroke=0)
+        self.setFillColor(colors.white)
+        self.setFont("Helvetica-Bold", 12)
+        self.drawString(margin + 10, header_y + header_h - 17, meta["title"])
+        self.setFillColor(_PDF_GREY400)
+        self.setFont("Helvetica", 8)
+        self.drawString(margin + 10, header_y + 6, meta["subtitle"])
+        self.setFillColor(_PDF_AMBER300)
+        self.setFont("Helvetica-Bold", 8)
+        self.drawRightString(page_w - margin - 10, header_y + header_h / 2 - 3, f"Generated: {meta['generated']}")
+
+        self.setStrokeColor(_PDF_GREY300)
+        self.setLineWidth(0.5)
+        self.line(margin, margin, page_w - margin, margin)
+        self.setFillColor(_PDF_GREY600)
+        self.setFont("Helvetica", 7)
+        self.drawString(margin, margin - 12, "Skill Sphere Official Analytics")
+        self.drawRightString(page_w - margin, margin - 12, f"Page {self._pageNumber} of {total_pages}")
+
+        self.restoreState()
+
+
+def build_marks_pdf(quiz, quiz_id, marks_rows):
+    # Mirrors admin_app/lib/daily_quiz_full_class_page.dart's generatePdf()
+    # layout/colors exactly: dark navy header bar, light metadata card,
+    # dark-header marks table, footer with page count.
+    buf = io.BytesIO()
+
+    generated_dt = datetime.now(IST)
+    generated_str = generated_dt.strftime("%d-%m-%Y  %H:%M")
+    meta = {
+        "title": "SKILL SPHERE - AI DAILY QUIZ CLASS REPORT",
+        "subtitle": "Full Class Daily Target Analytics",
+        "generated": generated_str,
+    }
+
+    doc = SimpleDocTemplate(
+        buf, pagesize=A4,
+        topMargin=16 * mm + 15 * mm + 6 * mm,
+        bottomMargin=16 * mm + 10 * mm,
+        leftMargin=16 * mm, rightMargin=16 * mm
+    )
+
+    styles = getSampleStyleSheet()
+    dept_style = ParagraphStyle("Dept", parent=styles["Normal"], fontSize=11, fontName="Helvetica-Bold", textColor=_PDF_TEXT_DARK, spaceAfter=3)
+    topic_style = ParagraphStyle("Topic", parent=styles["Normal"], fontSize=10, fontName="Helvetica-Bold", textColor=_PDF_BLUE, spaceAfter=3)
+    meta_style = ParagraphStyle("Meta", parent=styles["Normal"], fontSize=9, textColor=_PDF_GREY700, spaceAfter=3)
+    year_style = ParagraphStyle("Year", parent=styles["Normal"], fontSize=10, fontName="Helvetica-Bold", textColor=_PDF_BLUE, alignment=2, spaceAfter=3)
+    total_style = ParagraphStyle("Total", parent=styles["Normal"], fontSize=9, textColor=_PDF_GREY700, alignment=2)
+
+    quiz_date = quiz.get("quiz_date")
+    quiz_date_str = quiz_date.strftime("%d-%m-%Y") if hasattr(quiz_date, "strftime") else str(quiz_date or "")
+    start_time = str(quiz.get("quiz_start_time") or "").rsplit(":", 1)[0] if quiz.get("quiz_start_time") else ""
+    end_time = str(quiz.get("quiz_end_time") or "").rsplit(":", 1)[0] if quiz.get("quiz_end_time") else ""
+    duration = quiz.get("duration_minutes")
+    department_code = quiz.get("department") or ""
+
+    left_col = [Paragraph(f"Department: {_pdf_resolve_dept_name(department_code)}", dept_style)]
+    left_col.append(Paragraph(f"Topic: {quiz.get('topic') or ''}", topic_style))
+    left_col.append(Paragraph(f"Date: {quiz_date_str}", meta_style))
+    if start_time or end_time:
+        left_col.append(Paragraph(f"Timings: {start_time or '--'} - {end_time or '--'} ({duration} mins)", meta_style))
+    if quiz.get("difficulty"):
+        left_col.append(Paragraph(f"Difficulty: {quiz['difficulty']}", meta_style))
+    if quiz.get("created_by_name"):
+        left_col.append(Paragraph(f"Organised by: {quiz['created_by_name']}", meta_style))
+    if department_code:
+        left_col.append(Paragraph(f"Department: {department_code}", meta_style))
+
+    right_col = [
+        Paragraph(f"Year: Year {quiz.get('year') or ''}", year_style),
+        Paragraph(f"Total Students: {len(marks_rows)}", total_style),
+    ]
+
+    meta_table = Table([[left_col, right_col]], colWidths=[120 * mm, 42 * mm])
+    meta_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), _PDF_LIGHT_BG),
+        ("BOX", (0, 0), (-1, -1), 0.75, _PDF_BORDER_GREY),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("ALIGN", (1, 0), (1, 0), "RIGHT"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 10),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+        ("TOPPADDING", (0, 0), (-1, -1), 10),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+    ]))
+
+    elements = [meta_table, Spacer(1, 14)]
+
+    table_data = [["UID", "Student Name", "Marks Obtained"]]
+    for r in marks_rows:
+        attempted = r["attempt_status"] == "Attempted"
+        if attempted and r.get("score") is not None and r.get("total") is not None:
+            mark_text = f"{r['score']} / {r['total']}"
+        else:
+            mark_text = "ABSENT / NOT ATTEMPTED"
+        table_data.append([str(r["uid"]), r["name"] or "", mark_text])
+
+    marks_table = Table(table_data, colWidths=[30 * mm, 82 * mm, 50 * mm], repeatRows=1)
+    marks_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), _PDF_NAVY),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 9),
+        ("GRID", (0, 0), (-1, -1), 0.5, _PDF_BORDER_GREY),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ALIGN", (0, 0), (0, -1), "LEFT"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]))
+    elements.append(marks_table)
+
+    doc.build(
+        elements,
+        canvasmaker=lambda *a, **kw: _ReportCanvas(*a, report_meta=meta, **kw)
+    )
+    return buf.getvalue()
+
+
 def build_and_send_quiz_csv_report(year, quiz_id):
     # Emails every generated set's questions for one quiz to whoever
     # created it, then marks csv_sent so it's never re-sent. Failures
@@ -5502,13 +5701,22 @@ def build_and_send_quiz_csv_report(year, quiz_id):
         # until the first transaction commits csv_sent=1, then bails out.
         conn.begin()
         cur.execute(
-            f"SELECT title, subject, topic, department, quiz_date, created_by, csv_sent FROM {table} WHERE id=%s FOR UPDATE",
+            f"""
+            SELECT title, subject, topic, department, difficulty,
+                   quiz_date, quiz_start_time, quiz_end_time, duration_minutes,
+                   created_by, csv_sent
+            FROM {table} WHERE id=%s FOR UPDATE
+            """,
             (quiz_id,)
         )
         quiz = cur.fetchone()
         if not quiz or not quiz.get("created_by") or quiz.get("csv_sent"):
             conn.rollback()
             return
+
+        cur.execute("SELECT name FROM admins WHERE email=%s", (quiz["created_by"],))
+        creator_row = cur.fetchone()
+        quiz["created_by_name"] = creator_row["name"] if creator_row else quiz["created_by"]
 
         cur.execute(
             """
@@ -5534,25 +5742,55 @@ def build_and_send_quiz_csv_report(year, quiz_id):
                 r["set_number"], r["question"], r["option_a"], r["option_b"],
                 r["option_c"], r["option_d"], r["correct_option"]
             ])
-        csv_bytes = buf.getvalue().encode("utf-8")
+        questions_csv_bytes = buf.getvalue().encode("utf-8")
+
+        # Student marks roster - same department+year scoping and LEFT JOIN
+        # pattern as the in-app Full Class Report (admin_daily_quiz_full_class),
+        # so every student in the quiz's department appears even if they
+        # never attempted, not just the ones who have an attempts row.
+        # Rendered as a PDF (build_marks_pdf) to match the look of the
+        # Performance Analytics tab's Full Class Report, not a plain CSV.
+        attempts_table = f"daily_quiz_attempts_y{year}"
+        quiz_dept_id = BRANCH_TO_DEPT_ID.get(quiz["department"])
+        marks_pdf_bytes = None
+        if quiz_dept_id is not None:
+            cur.execute(
+                f"""
+                SELECT s.uid, s.name, a.score, a.total,
+                       CASE WHEN a.uid IS NULL THEN 'Not Attempted' ELSE 'Attempted' END AS attempt_status
+                FROM students s
+                LEFT JOIN {attempts_table} a
+                    ON s.uid = a.uid AND a.quiz_id = %s
+                WHERE CAST(s.year AS UNSIGNED) = %s AND s.dept_id = %s
+                ORDER BY s.uid
+                """,
+                (quiz_id, year, quiz_dept_id)
+            )
+            marks_rows = cur.fetchall()
+            if marks_rows:
+                quiz["year"] = year
+                marks_pdf_bytes = build_marks_pdf(quiz, quiz_id, marks_rows)
 
         subject = f"Quiz Report - {quiz['title'] or quiz['topic']} ({quiz['quiz_date']})"
         html_body = f"""
-            <p>Attached is the full set of generated questions for the daily quiz you created:</p>
+            <p>Attached are the reports for the daily quiz you created:</p>
             <p><strong>Topic:</strong> {quiz['topic']}<br>
             <strong>Subject:</strong> {quiz['subject']}<br>
             <strong>Department:</strong> {quiz['department']}<br>
             <strong>Date:</strong> {quiz['quiz_date']}</p>
-            <p>It includes every question, its options, and the correct answer across all
-            {len(set(r['set_number'] for r in rows))} generated set(s). Student marks remain
-            available in the app; this report exists because the underlying question data
-            gets cleared from the database 2 days after the quiz date.</p>
+            <p><strong>quiz_{quiz_id}_questions.csv</strong> - every question, its options, and
+            the correct answer across all {len(set(r['set_number'] for r in rows))} generated
+            set(s).</p>
+            {"<p><strong>quiz_" + str(quiz_id) + "_marks.pdf</strong> - every student in this department's marks (or Not Attempted), same format as the Performance Analytics Full Class Report.</p>" if marks_pdf_bytes else ""}
+            <p>This report exists because the underlying question data gets cleared from the
+            database 2 days after the quiz date; marks remain available in the app regardless.</p>
         """
 
-        send_email_with_attachment(
-            quiz["created_by"], subject, html_body,
-            csv_bytes, f"quiz_{quiz_id}_report.csv"
-        )
+        attachments = [(questions_csv_bytes, f"quiz_{quiz_id}_questions.csv")]
+        if marks_pdf_bytes:
+            attachments.append((marks_pdf_bytes, f"quiz_{quiz_id}_marks.pdf"))
+
+        send_email_with_attachments(quiz["created_by"], subject, html_body, attachments)
 
         cur.execute(f"UPDATE {table} SET csv_sent=1 WHERE id=%s", (quiz_id,))
         conn.commit()
@@ -5656,6 +5894,161 @@ _maintenance_run_lock = threading.Lock()
 CSV_REPORT_GRACE_MINUTES = 2
 
 
+def auto_finalize_abandoned_daily_quizzes():
+    # A student can close the tab mid-quiz (or the browser can be killed
+    # outright) without a submit request ever reaching the server - a
+    # beforeunload warning can't guarantee that request completes. But every
+    # answer they picked is already safely in daily_quiz_autosave the moment
+    # they picked it, so once the quiz's end_time + duration + grace has
+    # passed, whatever's still stuck in status='started' can be scored from
+    # autosave and finalized here - the reliable backstop for "auto-submit on
+    # close", independent of whether the client ever got a chance to call
+    # /api/quiz/submit itself.
+    try:
+        now_ist = datetime.now(IST)
+        conn = get_db()
+        cur = conn.cursor(pymysql.cursors.DictCursor)
+        for year in (1, 2, 3, 4):
+            attempts_table = f"daily_quiz_attempts_y{year}"
+            topics_table = f"daily_quiz_topics_y{year}"
+            bank_table = f"daily_quiz_questions_bank_y{year}"
+            cur.execute(f"""
+                SELECT a.uid, a.quiz_id, a.quiz_date, t.quiz_end_time, t.duration_minutes
+                FROM {attempts_table} a
+                JOIN {topics_table} t ON t.id = a.quiz_id
+                WHERE a.status = 'started'
+            """)
+            for row in cur.fetchall():
+                end_dt = IST.localize(datetime.combine(row["quiz_date"], dt_time.min) + row["quiz_end_time"])
+                duration_minutes = row.get("duration_minutes") or 10
+                cutoff_dt = end_dt + timedelta(minutes=duration_minutes + CSV_REPORT_GRACE_MINUTES)
+                if now_ist <= cutoff_dt:
+                    continue
+
+                uid, quiz_id, quiz_date = row["uid"], row["quiz_id"], row["quiz_date"]
+                try:
+                    conn.begin()
+                    cur.execute(
+                        f"SELECT id, correct_answer FROM {bank_table} WHERE uid=%s AND quiz_date=%s AND quiz_id=%s",
+                        (uid, quiz_date, quiz_id)
+                    )
+                    correct_map = {r["id"]: r["correct_answer"] for r in cur.fetchall()}
+                    total_questions = len(correct_map)
+
+                    cur.execute(
+                        "SELECT question_id, selected_answer FROM daily_quiz_autosave WHERE uid=%s AND quiz_date=%s AND quiz_id=%s",
+                        (uid, quiz_date, quiz_id)
+                    )
+                    score = 0
+                    for a in cur.fetchall():
+                        qid, selected = a["question_id"], a["selected_answer"]
+                        cur.execute(
+                            f"UPDATE {bank_table} SET student_answer=%s WHERE id=%s AND uid=%s AND quiz_date=%s",
+                            (selected, qid, uid, quiz_date)
+                        )
+                        if selected and selected == correct_map.get(qid):
+                            score += 1
+
+                    cur.execute(
+                        f"""
+                        UPDATE {attempts_table}
+                        SET score=%s, total=%s, status='submitted', time_taken_seconds=%s
+                        WHERE uid=%s AND quiz_date=%s AND quiz_id=%s AND status='started'
+                        """,
+                        (score, total_questions, duration_minutes * 60, uid, quiz_date, quiz_id)
+                    )
+                    conn.commit()
+                    print(f"[Maintenance] Auto-finalized abandoned daily quiz: uid={uid} quiz_id={quiz_id} year={year} score={score}/{total_questions}")
+                except Exception as e:
+                    conn.rollback()
+                    print(f"[Maintenance] Daily quiz auto-finalize failed uid={uid} quiz_id={quiz_id}:", e)
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print("[Maintenance] Daily quiz auto-finalize scan failed:", e)
+
+
+def auto_finalize_abandoned_faculty_quizzes():
+    # Same backstop as auto_finalize_abandoned_daily_quizzes, for faculty
+    # quizzes - scores whatever's in faculty_quiz_autosave once the quiz's
+    # end_time + duration + grace has passed and the attempt is still
+    # 'started'.
+    try:
+        now_ist = datetime.now(IST)
+        conn = get_db()
+        cur = conn.cursor(pymysql.cursors.DictCursor)
+        cur.execute("""
+            SELECT fa.uid, fa.quiz_id, m.quiz_date, m.quiz_end_time, m.duration_minutes, m.year, m.created_by
+            FROM faculty_quiz_attempts fa
+            JOIN faculty_quiz_master m ON m.quiz_id = fa.quiz_id
+            WHERE fa.status = 'started'
+        """)
+        rows = cur.fetchall()
+        if rows:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS faculty_quiz_student_answers (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    uid INT NOT NULL,
+                    quiz_id INT NOT NULL,
+                    question_id INT NOT NULL,
+                    selected_answer VARCHAR(255),
+                    UNIQUE KEY uk_std_q (uid, quiz_id, question_id)
+                )
+            """)
+        for row in rows:
+            end_dt = IST.localize(datetime.combine(row["quiz_date"], dt_time.min) + row["quiz_end_time"])
+            duration_minutes = row.get("duration_minutes") or 10
+            cutoff_dt = end_dt + timedelta(minutes=duration_minutes + CSV_REPORT_GRACE_MINUTES)
+            if now_ist <= cutoff_dt:
+                continue
+
+            uid, quiz_id, year = row["uid"], row["quiz_id"], row["year"]
+            marks_table = f"assignment_quiz_marks_y{year}"
+            try:
+                conn.begin()
+                cur.execute(f"SELECT id FROM {marks_table} WHERE uid=%s AND quiz_id=%s FOR UPDATE", (uid, quiz_id))
+                if cur.fetchone():
+                    # Already submitted through the normal flow between the
+                    # scan above and this lock - just fix the stale flag.
+                    cur.execute("UPDATE faculty_quiz_attempts SET status='submitted' WHERE uid=%s AND quiz_id=%s", (uid, quiz_id))
+                    conn.commit()
+                    continue
+
+                cur.execute("SELECT id, correct_option FROM faculty_quiz_questions_new WHERE quiz_id=%s", (quiz_id,))
+                correct_map = {r["id"]: r["correct_option"] for r in cur.fetchall()}
+                total_questions = len(correct_map)
+
+                cur.execute("SELECT question_id, selected_answer FROM faculty_quiz_autosave WHERE uid=%s AND quiz_id=%s", (uid, quiz_id))
+                score = 0
+                for a in cur.fetchall():
+                    qid, selected = a["question_id"], a["selected_answer"]
+                    if correct_map.get(qid) == selected:
+                        score += 1
+                    cur.execute("""
+                        INSERT INTO faculty_quiz_student_answers (uid, quiz_id, question_id, selected_answer)
+                        VALUES (%s, %s, %s, %s)
+                        ON DUPLICATE KEY UPDATE selected_answer = VALUES(selected_answer)
+                    """, (uid, quiz_id, qid, selected))
+
+                cur.execute(
+                    f"""
+                    INSERT INTO {marks_table} (uid, quiz_id, quiz_date, total_questions, score, created_by)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                    """,
+                    (uid, quiz_id, today_ist(), total_questions, score, row.get("created_by") or "Admin")
+                )
+                cur.execute("UPDATE faculty_quiz_attempts SET status='submitted' WHERE uid=%s AND quiz_id=%s", (uid, quiz_id))
+                conn.commit()
+                print(f"[Maintenance] Auto-finalized abandoned faculty quiz: uid={uid} quiz_id={quiz_id} score={score}/{total_questions}")
+            except Exception as e:
+                conn.rollback()
+                print(f"[Maintenance] Faculty quiz auto-finalize failed uid={uid} quiz_id={quiz_id}:", e)
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print("[Maintenance] Faculty quiz auto-finalize scan failed:", e)
+
+
 def run_daily_quiz_maintenance():
     # Guards against two overlapping passes (the startup thread and the
     # first before_request-triggered pass land within milliseconds of each
@@ -5691,12 +6084,19 @@ def run_daily_quiz_maintenance():
     finally:
         _maintenance_run_lock.release()
 
+    auto_finalize_abandoned_daily_quizzes()
+    auto_finalize_abandoned_faculty_quizzes()
     purge_old_daily_quiz_data()
 
 
 _last_maintenance_run = None
 _maintenance_lock = threading.Lock()
-MAINTENANCE_THROTTLE_SECONDS = 600  # 10 minutes
+MAINTENANCE_THROTTLE_SECONDS = 60  # 1 minute - keeps CSV-report timing close
+# to the intended end_time + duration + grace cutoff. The scan itself is
+# 4 cheap indexed-ish SELECTs, so checking once a minute (only while real
+# traffic is flowing in - this piggybacks on before_request, same as
+# before) is not a meaningful cost, and 10 minutes was letting reports go
+# out up to ~10 minutes later than the cutoff implied they should.
 
 
 def maybe_run_maintenance():
@@ -7188,5 +7588,10 @@ if __name__ == "__main__":
     threading.Thread(target=run_daily_quiz_maintenance, daemon=True).start()
     app.run(
         host="0.0.0.0",
-        port=port
+        port=port,
+        threaded=True  # without this, Flask's dev server handles one
+                        # request at a time - with 18 Gemini worker threads
+                        # and real concurrent students hitting the API, that
+                        # serializes everything behind whatever request (or
+                        # background DB query) is currently running.
     )

@@ -279,7 +279,8 @@ class _AddDailyQuizPageState extends State<AddDailyQuizPage> {
         showError(data["error"] ?? "Failed to add quiz");
       }
     } catch (e) {
-      showError(e.toString());
+      debugPrint("Add quiz topic error: $e");
+      showError("Unable to connect to the server. Please try again.");
     }
 
     setState(() => processing = false);
@@ -374,7 +375,8 @@ class _AddDailyQuizPageState extends State<AddDailyQuizPage> {
         showError(data["error"] ?? "Failed to remove quiz");
       }
     } catch (e) {
-      showError(e.toString());
+      debugPrint("Remove quiz error: $e");
+      showError("Unable to connect to the server. Please try again.");
     }
   }
 
@@ -457,7 +459,8 @@ class _AddDailyQuizPageState extends State<AddDailyQuizPage> {
         showError(data["error"] ?? "Failed to update timings");
       }
     } catch (e) {
-      showError(e.toString());
+      debugPrint("Update timings error: $e");
+      showError("Unable to connect to the server. Please try again.");
     }
   }
 

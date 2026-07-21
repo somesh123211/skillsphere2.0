@@ -122,7 +122,8 @@ class _StudentsListPageState extends State<StudentsListPage> {
         if (mounted) showError(data["message"] ?? "Failed to load students");
       }
     } catch (e) {
-      if (mounted) showError(e.toString());
+      debugPrint("Students list load error: $e");
+      if (mounted) showError("Unable to connect to the server. Please try again.");
     }
 
     if (mounted) setState(() => loading = false);

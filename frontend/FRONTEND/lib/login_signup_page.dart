@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 
 import 'student_dashboard.dart';
 import 'forgot_password_page.dart';
+import 'session_storage.dart';
 
 class LoginSignupPage extends StatefulWidget {
   const LoginSignupPage({super.key});
@@ -112,13 +113,15 @@ class _LoginSignupPageState extends State<LoginSignupPage> {
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 200) {
+        final studentData = Map<String, dynamic>.from(data["student"]);
+        await SessionStorage.saveSession(data["token"], studentData);
         if (!mounted) return;
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
             builder: (_) => StudentDashboard(
               token: data["token"],
-              studentData: Map<String, dynamic>.from(data["student"]),
+              studentData: studentData,
             ),
           ),
         );

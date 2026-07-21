@@ -1,10 +1,13 @@
 import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
 // --- IMPORTS ---
 import 'package:placement_portal/pages/quiz_review_page.dart';
+import 'platform/fullscreen.dart';
+import 'platform/unload_guard.dart';
 
 class DailyQuizPage extends StatefulWidget {
   final String token;
@@ -16,7 +19,7 @@ class DailyQuizPage extends StatefulWidget {
   State<DailyQuizPage> createState() => _DailyQuizPageState();
 }
 
-class _DailyQuizPageState extends State<DailyQuizPage> {
+class _DailyQuizPageState extends State<DailyQuizPage> with WidgetsBindingObserver {
   final String baseUrl = "http://localhost:5000";
 
   bool loading = true;
@@ -33,16 +36,66 @@ class _DailyQuizPageState extends State<DailyQuizPage> {
   Timer? countdownTimer;
 
   // ================= INIT =================
+  bool _wasBackgrounded = false;
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     fetchQuiz();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     countdownTimer?.cancel();
+    UnloadGuard.disable();
+    exitFullscreen();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
+  }
+
+  // Covers the native-app case (no browser at all): backgrounding via the
+  // Home button, app-switcher, or a lock screen can't be intercepted or
+  // warned-about beforehand - that's an OS-level action no app on Android
+  // or iOS can prevent. This is the "1st warning" for that case: the moment
+  // the student comes back, if the quiz is still active, tell them plainly
+  // that leaving again may auto-submit whatever they've answered so far.
+  // The actual guarantee that it DOES get submitted eventually either way
+  // comes from the server-side sweep (auto_finalize_abandoned_daily_quizzes)
+  // - this dialog is just the heads-up, not the safety net itself.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (quizFinished) return;
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
+      _wasBackgrounded = true;
+    } else if (state == AppLifecycleState.resumed && _wasBackgrounded) {
+      _wasBackgrounded = false;
+      _showBackgroundWarning();
+    }
+  }
+
+  void _showBackgroundWarning() {
+    if (!mounted || quizFinished) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || quizFinished) return;
+      showDialog(
+        context: context,
+        builder: (_) => AlertDialog(
+          title: const Text("Warning"),
+          content: const Text(
+            "You left the quiz. Your answers so far are saved, but leaving "
+            "again may cause the quiz to be auto-submitted before you're done.",
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text("OK, I understand"),
+            ),
+          ],
+        ),
+      );
+    });
   }
 
   // ================= TIMER =================
@@ -106,6 +159,9 @@ class _DailyQuizPageState extends State<DailyQuizPage> {
           loading = false;
         });
         startCountdown();
+        requestFullscreen();
+        UnloadGuard.enable();
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
       } else {
         setState(() => loading = false);
         _showErrorDialog(data["message"] ?? "Failed to load today's Ai Quiz");
@@ -229,6 +285,9 @@ class _DailyQuizPageState extends State<DailyQuizPage> {
     optionsDisabled = true;
     setState(() => submitting = true);
     countdownTimer?.cancel();
+    UnloadGuard.disable();
+    exitFullscreen();
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 
     try {
       final payload = {

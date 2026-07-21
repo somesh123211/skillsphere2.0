@@ -20,3 +20,4 @@ cloudinary==1.41.0
 
 DBUtils==3.1.0
 pymysql
+reportlab==4.0.7

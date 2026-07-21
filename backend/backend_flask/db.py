@@ -20,6 +20,12 @@ pool = PooledDB(
     mincached=1,            # Do NOT pre-create connections (safe startup)
     maxcached=2,            # Max idle connections
     blocking=True,          # Wait if pool is exhausted
+    ping=1,                 # Check (and silently reconnect) a cursored
+                             # connection before use - without this, an idle
+                             # pooled connection that MySQL has since dropped
+                             # (wait_timeout, network blip) raises "MySQL
+                             # server has gone away" / InterfaceError(0, '')
+                             # on the next request that happens to reuse it.
     host=os.getenv("MYSQL_HOST"),
     user=os.getenv("MYSQL_USER"),
     password=os.getenv("MYSQL_PASSWORD"),

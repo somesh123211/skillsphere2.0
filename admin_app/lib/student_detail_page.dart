@@ -69,7 +69,8 @@ class _StudentDetailPageState extends State<StudentDetailPage> {
         if (mounted) showError(data["message"] ?? "Failed to load student");
       }
     } catch (e) {
-      if (mounted) showError(e.toString());
+      debugPrint("Student detail load error: $e");
+      if (mounted) showError("Unable to connect to the server. Please try again.");
     }
 
     if (mounted) setState(() => loading = false);

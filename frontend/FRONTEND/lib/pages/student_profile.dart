@@ -13,6 +13,7 @@ import 'quiz_review_page.dart';
 import 'today_quizzes_list_page.dart';
 // ✅ ADDED LOGIN PAGE IMPORT
 import '../login_signup_page.dart';
+import '../session_storage.dart';
 
 class StudentProfilePage extends StatefulWidget {
   final String token;
@@ -163,7 +164,9 @@ class _StudentProfilePageState extends State<StudentProfilePage>
   }
 
   // ---------------- LOGOUT LOGIC ----------------
-  void _handleLogout() {
+  Future<void> _handleLogout() async {
+    await SessionStorage.clearSession();
+    if (!mounted) return;
     // Navigate to Login Page and remove all previous routes
     Navigator.pushAndRemoveUntil(
       context,
