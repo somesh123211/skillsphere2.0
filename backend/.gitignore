@@ -12,5 +12,9 @@ __pycache__/
 # Ignore environment variables and configs
 .env
 
+# Machine-local TLS trust workaround (e.g. antivirus HTTPS-scanning root
+# cert) - not portable between machines, same reasoning as .env above.
+certs/
+
 # Ignore nested git repo
 backend_flask/.git/

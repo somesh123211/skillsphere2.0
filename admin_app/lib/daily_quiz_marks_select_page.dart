@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'daily_quiz_single_student_page.dart';
 import 'daily_quiz_full_class_page.dart';
+import 'admin_session.dart';
 
 // --- AURUM THEME COLORS ---
 class AurumColors {
@@ -21,11 +22,11 @@ class AurumColors {
 }
 
 class DailyQuizMarksSelectPage extends StatelessWidget {
-  final String token;
+  final AdminSession session;
 
   const DailyQuizMarksSelectPage({
     Key? key,
-    required this.token,
+    required this.session,
   }) : super(key: key);
 
   @override
@@ -68,7 +69,7 @@ class DailyQuizMarksSelectPage extends StatelessWidget {
                   context,
                   MaterialPageRoute(
                     builder: (_) => DailyQuizSingleStudentPage(
-                      token: token,
+                      session: session,
                     ),
                   ),
                 );
@@ -91,7 +92,7 @@ class DailyQuizMarksSelectPage extends StatelessWidget {
                   context,
                   MaterialPageRoute(
                     builder: (_) => DailyQuizFullClassPage(
-                      token: token,
+                      session: session,
                     ),
                   ),
                 );

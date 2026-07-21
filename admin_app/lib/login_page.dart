@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'admin_otp_page.dart';
 import 'forgot_password_page.dart';
 import 'dashboard_page.dart';
+import 'admin_session.dart';
 
 // --- AURUM THEME COLORS ---
 class AurumColors {
@@ -34,7 +35,7 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController emailCtrl = TextEditingController();
   final TextEditingController passCtrl = TextEditingController();
 
-  final String baseUrl = "https://skillsphere1-0-0.onrender.com";
+  final String baseUrl = "http://localhost:5000";
   bool loading = false;
 
   bool _obscurePassword = true;
@@ -87,8 +88,7 @@ class _LoginPageState extends State<LoginPage> {
           context,
           MaterialPageRoute(
             builder: (_) => DashboardPage(
-              token: data["token"],
-              adminName: data["admin"]["name"],
+              session: AdminSession.fromLogin(data["token"], data["admin"]),
             ),
           ),
         );
@@ -103,10 +103,11 @@ class _LoginPageState extends State<LoginPage> {
         ),
       );
     } catch (e) {
+      debugPrint("Admin login error: $e");
       setState(() => loading = false);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("Unexpected error: $e"),
+          content: Text("Unable to connect to the server. Please try again."),
           backgroundColor: Colors.redAccent,
         ),
       );

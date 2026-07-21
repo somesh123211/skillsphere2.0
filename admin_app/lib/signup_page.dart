@@ -12,7 +12,7 @@ class _SignupPageState extends State<SignupPage> {
   final emailCtrl = TextEditingController();
   final passCtrl = TextEditingController();
 
-  final String baseUrl = "http://localhost:5001";
+  final String baseUrl = "http://localhost:5000";
   bool loading = false;
 
   Future<void> signup() async {

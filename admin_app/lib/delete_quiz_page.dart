@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'admin_session.dart';
 
 // --- AURUM THEME COLORS ---
 class AurumColors {
@@ -28,15 +29,17 @@ class AurumColors {
 }
 
 class DeleteQuizPage extends StatefulWidget {
-  final String token;
-  const DeleteQuizPage({Key? key, required this.token}) : super(key: key);
+  final AdminSession session;
+  final int? initialQuizId;
+  const DeleteQuizPage({Key? key, required this.session, this.initialQuizId})
+      : super(key: key);
 
   @override
   State<DeleteQuizPage> createState() => _DeleteQuizPageState();
 }
 
 class _DeleteQuizPageState extends State<DeleteQuizPage> {
-  final String baseUrl = "https://skillsphere1-0-0.onrender.com";
+  final String baseUrl = "http://localhost:5000";
 
   final TextEditingController quizIdController = TextEditingController();
 
@@ -44,6 +47,15 @@ class _DeleteQuizPageState extends State<DeleteQuizPage> {
   bool searching = false;
   bool deleting = false;
   String? error;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialQuizId != null) {
+      quizIdController.text = widget.initialQuizId.toString();
+      WidgetsBinding.instance.addPostFrameCallback((_) => searchQuiz());
+    }
+  }
 
   // 🔍 SEARCH QUIZ (Logic Unchanged)
   Future<void> searchQuiz() async {
@@ -59,7 +71,7 @@ class _DeleteQuizPageState extends State<DeleteQuizPage> {
           "$baseUrl/api/admin/faculty-quiz/delete-search?quiz_id=${quizIdController.text}",
         ),
         headers: {
-          "Authorization": "Bearer ${widget.token}",
+          "Authorization": "Bearer ${widget.session.token}",
         },
       ).timeout(const Duration(seconds: 10));
 
@@ -91,7 +103,7 @@ class _DeleteQuizPageState extends State<DeleteQuizPage> {
         Uri.parse("$baseUrl/api/admin/faculty-quiz/delete"),
         headers: {
           "Content-Type": "application/json",
-          "Authorization": "Bearer ${widget.token}",
+          "Authorization": "Bearer ${widget.session.token}",
         },
         body: json.encode({
           "quiz_id": quiz!["quiz_id"],
@@ -306,6 +318,12 @@ class _DeleteQuizPageState extends State<DeleteQuizPage> {
                     ),
                     const Divider(color: Colors.white10, height: 30),
 
+                    if (quiz!["quiz_name"] != null &&
+                        "${quiz!["quiz_name"]}".isNotEmpty) ...[
+                      _buildInfoRow(Icons.badge_outlined, "Name",
+                          "${quiz!["quiz_name"]}"),
+                      const SizedBox(height: 12),
+                    ],
                     _buildInfoRow(Icons.tag, "Quiz ID", "${quiz!["quiz_id"]}"),
                     const SizedBox(height: 12),
                     _buildInfoRow(

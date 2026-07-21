@@ -1,0 +1,6 @@
+question,option_a,option_b,option_c,option_d,correct_option
+What is a data warehouse primarily used for?,Daily operational transactions,Data analysis and decision making,Designing user interfaces,Running real-time operating systems,b
+What does OLTP stand for?,Online Life Testing Process,Online Transaction Processing,Online Analytical Processing,Operational Logical Transfer Protocol,b
+What does OLAP stand for?,Online Analytical Processing,Operational Logic And Planning,Online Transaction Processing,Object Layer Analysis Protocol,a
+Which system is optimized for fast and frequent text/data modifications or inserts?,OLAP,Data Warehouse,OLTP,Data Mining,c
+Which of the following describes Data Mining?,The process of physically digging for hardware components,Extracting hidden predictive patterns from large datasets,Backing up database servers daily,Creating simple spreadsheets for calculations,b

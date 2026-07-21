@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'admin_session.dart';
+import 'edit_student_page.dart';
 
 // --- AURUM THEME COLORS ---
 class AurumColors {
@@ -21,12 +23,12 @@ class AurumColors {
 }
 
 class StudentDetailPage extends StatefulWidget {
-  final String token;
+  final AdminSession session;
   final String uid;
 
   const StudentDetailPage({
     Key? key,
-    required this.token,
+    required this.session,
     required this.uid,
   }) : super(key: key);
 
@@ -35,7 +37,7 @@ class StudentDetailPage extends StatefulWidget {
 }
 
 class _StudentDetailPageState extends State<StudentDetailPage> {
-  final String baseUrl = "https://skillsphere1-0-0.onrender.com";
+  final String baseUrl = "http://localhost:5000";
 
   bool loading = true;
   Map<String, dynamic>? student;
@@ -51,7 +53,7 @@ class _StudentDetailPageState extends State<StudentDetailPage> {
       final response = await http.get(
         Uri.parse("$baseUrl/api/admin/student/${widget.uid}"),
         headers: {
-          "Authorization": "Bearer ${widget.token}",
+          "Authorization": "Bearer ${widget.session.token}",
         },
       );
 
@@ -99,6 +101,25 @@ class _StudentDetailPageState extends State<StudentDetailPage> {
           letterSpacing: 1.0,
         ),
         iconTheme: const IconThemeData(color: AurumColors.accentGold),
+        actions: [
+          if (!loading && student != null && widget.session.canEditStudents)
+            IconButton(
+              icon: const Icon(Icons.edit_outlined, color: AurumColors.accentGold),
+              tooltip: "Edit Student",
+              onPressed: () async {
+                final updated = await Navigator.push<bool>(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => EditStudentPage(
+                      session: widget.session,
+                      student: student!,
+                    ),
+                  ),
+                );
+                if (updated == true) fetchStudent();
+              },
+            ),
+        ],
       ),
       body: loading
           ? const Center(
@@ -230,6 +251,14 @@ class _StudentDetailPageState extends State<StudentDetailPage> {
                               label: "Academic Year",
                               value:
                                   "Year ${student!["year"]?.toString() ?? "?"}",
+                            ),
+
+                            const Divider(color: Colors.white10, height: 30),
+
+                            _buildDetailRow(
+                              icon: Icons.school_outlined,
+                              label: "Branch",
+                              value: student!["branch"]?.toString() ?? "N/A",
                             ),
                           ],
                         ),

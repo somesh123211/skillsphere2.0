@@ -10,6 +10,7 @@ import 'marks_history_page.dart';
 import 'assignment_marks_history_page.dart';
 import 'leaderboard_page.dart';
 import 'quiz_review_page.dart';
+import 'today_quizzes_list_page.dart';
 // ✅ ADDED LOGIN PAGE IMPORT
 import '../login_signup_page.dart';
 
@@ -28,7 +29,7 @@ class _StudentProfilePageState extends State<StudentProfilePage>
   //            BACKEND LOGIC (PRESERVED)
   // ==========================================
 
-  final String baseUrl = "https://skillsphere1-0-0.onrender.com";
+  final String baseUrl = "http://localhost:5000";
 
   Map<String, dynamic>? profile;
   Map<String, dynamic>? todayQuiz;
@@ -488,7 +489,7 @@ class _StudentProfilePageState extends State<StudentProfilePage>
                             context,
                             MaterialPageRoute(
                                 builder: (_) =>
-                                    QuizReviewPage(token: widget.token)));
+                                    TodayQuizzesListPage(token: widget.token, type: "ai")));
                       },
                       child: Text("VIEW ANSWERS",
                           style: TextStyle(
@@ -522,6 +523,7 @@ class _StudentProfilePageState extends State<StudentProfilePage>
               ),
               const SizedBox(height: 15),
               Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   facultyQuizLoading
                       ? const SizedBox(
@@ -556,6 +558,26 @@ class _StudentProfilePageState extends State<StudentProfilePage>
                             ),
                           ],
                         ),
+                  if (facultyTodayQuiz?["attempted"] == true)
+                    OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        side: BorderSide(color: cyan.withOpacity(0.5)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20)),
+                      ),
+                      onPressed: () {
+                        Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) =>
+                                    TodayQuizzesListPage(token: widget.token, type: "faculty")));
+                      },
+                      child: Text("VIEW ANSWERS",
+                          style: TextStyle(
+                              color: cyan,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold)),
+                    )
                 ],
               ),
             ],

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
+import 'quiz_review_page.dart';
 
 class MarksHistoryPage extends StatefulWidget {
   final String token;
@@ -16,7 +17,7 @@ class _MarksHistoryPageState extends State<MarksHistoryPage> {
   // ==========================================
 
   // NOTE: Use 10.0.2.2 for Android Emulator, 127.0.0.1 for Web
-  final String baseUrl = "https://skillsphere1-0-0.onrender.com";
+  final String baseUrl = "http://localhost:5000";
 
   bool loading = true;
   List<Map<String, dynamic>> history = [];
@@ -276,6 +277,16 @@ class _MarksHistoryPageState extends State<MarksHistoryPage> {
                               final String date =
                                   item["quiz_date"] ?? "Unknown Date";
 
+                              final String? subject = item["subject"];
+                              final String? topic = item["topic"];
+                              final String quizName = [subject, topic]
+                                  .where((s) => s != null && s.toString().trim().isNotEmpty)
+                                  .join(" - ");
+                              final String organiser = item["organised_by"] ?? "Admin";
+                              final String startTime = item["quiz_start_time"] ?? "";
+                              final String endTime = item["quiz_end_time"] ?? "";
+                              final dynamic quizIdVal = item["quiz_id"];
+
                               // Logic: Percentage Color
                               double percentage =
                                   total > 0 ? (score / total) : 0.0;
@@ -312,120 +323,177 @@ class _MarksHistoryPageState extends State<MarksHistoryPage> {
                                 ),
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(12),
-                                  child: IntrinsicHeight(
-                                    child: Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.stretch,
-                                      children: [
-                                        // COLORED STATUS STRIP
-                                        Container(
-                                          width: 6,
-                                          decoration: BoxDecoration(
-                                            color: statusColor,
-                                            boxShadow: [
-                                              BoxShadow(
-                                                  color: statusColor
-                                                      .withOpacity(0.5),
-                                                  blurRadius: 10)
-                                            ],
-                                          ),
-                                        ),
-
-                                        // CONTENT
-                                        Expanded(
-                                          child: Padding(
-                                            padding: const EdgeInsets.symmetric(
-                                                horizontal: 16, vertical: 16),
-                                            child: Row(
-                                              children: [
-                                                // LEFT: INFO
-                                                Expanded(
-                                                  child: Column(
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment
-                                                            .start,
-                                                    children: [
-                                                      Row(
-                                                        children: [
-                                                          Icon(
-                                                              Icons
-                                                                  .calendar_today,
-                                                              color: Colors
-                                                                  .white38,
-                                                              size: 14),
-                                                          const SizedBox(
-                                                              width: 6),
-                                                          Text(
-                                                            date,
-                                                            style: const TextStyle(
-                                                                color: Colors
-                                                                    .white,
-                                                                fontSize: 14,
-                                                                fontWeight:
-                                                                    FontWeight
-                                                                        .w600),
-                                                          ),
-                                                        ],
-                                                      ),
-                                                      const SizedBox(height: 8),
-                                                      // Percentage Bar
-                                                      LinearProgressIndicator(
-                                                        value: percentage,
-                                                        backgroundColor:
-                                                            Colors.white10,
-                                                        color: statusColor,
-                                                        minHeight: 4,
-                                                        borderRadius:
-                                                            BorderRadius
-                                                                .circular(2),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-
-                                                const SizedBox(width: 16),
-
-                                                // RIGHT: SCORE BADGE
-                                                Container(
-                                                  padding: const EdgeInsets
-                                                      .symmetric(
-                                                      horizontal: 12,
-                                                      vertical: 8),
-                                                  decoration: BoxDecoration(
+                                  child: InkWell(
+                                    onTap: null,
+                                    child: IntrinsicHeight(
+                                      child: Row(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.stretch,
+                                        children: [
+                                          Container(
+                                            width: 6,
+                                            decoration: BoxDecoration(
+                                              color: statusColor,
+                                              boxShadow: [
+                                                BoxShadow(
                                                     color: statusColor
-                                                        .withOpacity(0.15),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            12),
-                                                    border: Border.all(
-                                                        color: statusColor
-                                                            .withOpacity(0.3)),
-                                                  ),
-                                                  child: Column(
-                                                    mainAxisAlignment:
-                                                        MainAxisAlignment
-                                                            .center,
-                                                    children: [
-                                                      Icon(statusIcon,
-                                                          color: statusColor,
-                                                          size: 20),
-                                                      const SizedBox(height: 4),
-                                                      Text(
-                                                        "$score/$total",
-                                                        style: TextStyle(
-                                                            color: statusColor,
-                                                            fontWeight:
-                                                                FontWeight.bold,
-                                                            fontSize: 16),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
+                                                        .withOpacity(0.5),
+                                                    blurRadius: 10)
                                               ],
                                             ),
                                           ),
-                                        ),
-                                      ],
+                                          Expanded(
+                                            child: Padding(
+                                              padding: const EdgeInsets.symmetric(
+                                                  horizontal: 16, vertical: 16),
+                                              child: Row(
+                                                children: [
+                                                  Expanded(
+                                                    child: Column(
+                                                      crossAxisAlignment:
+                                                          CrossAxisAlignment
+                                                              .start,
+                                                      children: [
+                                                        if (quizName.isNotEmpty)
+                                                          Padding(
+                                                            padding: const EdgeInsets
+                                                                .only(bottom: 6),
+                                                            child: Text(
+                                                              quizName,
+                                                              style: const TextStyle(
+                                                                  color: Colors.white,
+                                                                  fontWeight:
+                                                                      FontWeight.bold,
+                                                                  fontSize: 15),
+                                                            ),
+                                                          ),
+                                                        Row(
+                                                          children: [
+                                                            if (quizIdVal != null) ...[
+                                                              Text(
+                                                                "MISSION ID: $quizIdVal",
+                                                                style: TextStyle(
+                                                                    color: accentColor,
+                                                                    fontFamily:
+                                                                        'Courier',
+                                                                    fontWeight:
+                                                                        FontWeight.bold,
+                                                                    fontSize: 11),
+                                                              ),
+                                                              const SizedBox(width: 10),
+                                                            ],
+                                                            const Icon(
+                                                                Icons
+                                                                    .calendar_today,
+                                                                color: Colors
+                                                                    .white38,
+                                                                size: 12),
+                                                            const SizedBox(
+                                                                width: 4),
+                                                            Text(
+                                                              date,
+                                                              style: const TextStyle(
+                                                                  color: Colors
+                                                                      .white70,
+                                                                  fontSize: 12,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .w600),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                        const SizedBox(height: 6),
+                                                        Row(
+                                                          children: [
+                                                            const Icon(Icons.person,
+                                                                color: Colors.white54,
+                                                                size: 14),
+                                                            const SizedBox(width: 6),
+                                                            Text(
+                                                              "Organised by: $organiser",
+                                                              style: const TextStyle(
+                                                                  color: Colors.white70,
+                                                                  fontSize: 12),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                        if (startTime.isNotEmpty ||
+                                                            endTime.isNotEmpty) ...[
+                                                          const SizedBox(height: 4),
+                                                          Row(
+                                                            children: [
+                                                              const Icon(
+                                                                  Icons.access_time,
+                                                                  color: Colors
+                                                                      .amberAccent,
+                                                                  size: 14),
+                                                              const SizedBox(width: 6),
+                                                              Text(
+                                                                "Time: ${startTime.isNotEmpty ? startTime : '--'} - ${endTime.isNotEmpty ? endTime : '--'}",
+                                                                style: const TextStyle(
+                                                                    color: Colors
+                                                                        .amberAccent,
+                                                                    fontSize: 12),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        ],
+                                                        const SizedBox(height: 8),
+                                                        LinearProgressIndicator(
+                                                          value: percentage,
+                                                          backgroundColor:
+                                                              Colors.white10,
+                                                          color: statusColor,
+                                                          minHeight: 4,
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(2),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 16),
+                                                  Container(
+                                                    padding: const EdgeInsets
+                                                        .symmetric(
+                                                        horizontal: 12,
+                                                        vertical: 8),
+                                                    decoration: BoxDecoration(
+                                                      color: statusColor
+                                                          .withOpacity(0.15),
+                                                      borderRadius:
+                                                          BorderRadius.circular(
+                                                              12),
+                                                      border: Border.all(
+                                                          color: statusColor
+                                                              .withOpacity(0.3)),
+                                                    ),
+                                                    child: Column(
+                                                      mainAxisAlignment:
+                                                          MainAxisAlignment
+                                                              .center,
+                                                      children: [
+                                                        Icon(statusIcon,
+                                                            color: statusColor,
+                                                            size: 20),
+                                                        const SizedBox(height: 4),
+                                                        Text(
+                                                          "$score/$total",
+                                                          style: TextStyle(
+                                                              color: statusColor,
+                                                              fontWeight:
+                                                                  FontWeight.bold,
+                                                              fontSize: 16),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ),

@@ -10,6 +10,7 @@ import 'package:printing/printing.dart';
 
 // PAGE IMPORT
 import 'student_detail_page.dart';
+import 'admin_session.dart';
 
 // --- AURUM THEME COLORS ---
 class AurumColors {
@@ -30,11 +31,11 @@ class AurumColors {
 }
 
 class StudentsListPage extends StatefulWidget {
-  final String token;
+  final AdminSession session;
 
   const StudentsListPage({
     Key? key,
-    required this.token,
+    required this.session,
   }) : super(key: key);
 
   @override
@@ -42,16 +43,48 @@ class StudentsListPage extends StatefulWidget {
 }
 
 class _StudentsListPageState extends State<StudentsListPage> {
-  final String baseUrl = "https://skillsphere1-0-0.onrender.com";
+  final String baseUrl = "http://localhost:5000";
 
   int selectedYear = 2;
   bool loading = false;
   List students = [];
 
+  // Department filter — only super_admin/admin get a free choice; hod/
+  // faculty are already forced to their own department server-side.
+  bool get showDeptFilter => widget.session.isSuperAdmin;
+  List<Map<String, dynamic>> departments = [];
+  int? selectedDeptId;
+  bool loadingDepts = false;
+
   @override
   void initState() {
     super.initState();
+    if (showDeptFilter) {
+      fetchDepartments();
+    }
     fetchStudents();
+  }
+
+  // =========================
+  // FETCH DEPARTMENTS (super_admin/admin only)
+  // =========================
+  Future<void> fetchDepartments() async {
+    setState(() => loadingDepts = true);
+    try {
+      final response = await http.get(
+        Uri.parse("$baseUrl/api/admin/departments"),
+        headers: {"Authorization": "Bearer ${widget.session.token}"},
+      );
+      final data = jsonDecode(response.body);
+      if (data["success"] == true) {
+        setState(() {
+          departments = List<Map<String, dynamic>>.from(data["departments"]);
+        });
+      }
+    } catch (e) {
+      // Filter just stays on "All Departments" if this fails.
+    }
+    setState(() => loadingDepts = false);
   }
 
   // =========================
@@ -64,10 +97,16 @@ class _StudentsListPageState extends State<StudentsListPage> {
     });
 
     try {
+      final uri = Uri.parse("$baseUrl/api/admin/students").replace(
+        queryParameters: {
+          "year": "$selectedYear",
+          if (selectedDeptId != null) "dept_id": "$selectedDeptId",
+        },
+      );
       final response = await http.get(
-        Uri.parse("$baseUrl/api/admin/students?year=$selectedYear"),
+        uri,
         headers: {
-          "Authorization": "Bearer ${widget.token}",
+          "Authorization": "Bearer ${widget.session.token}",
         },
       );
 
@@ -119,58 +158,203 @@ class _StudentsListPageState extends State<StudentsListPage> {
     );
   }
 
+  String getDepartmentName() {
+    if (selectedDeptId != null) {
+      final found = departments.firstWhere(
+        (d) => d["id"] == selectedDeptId,
+        orElse: () => {},
+      );
+      if (found.isNotEmpty && found["name"] != null) {
+        return found["name"].toString();
+      }
+    }
+    if (widget.session.deptName.isNotEmpty) {
+      return widget.session.deptName;
+    }
+    if (students.isNotEmpty) {
+      for (var s in students) {
+        if (s["dept_name"] != null && s["dept_name"].toString().isNotEmpty) {
+          return s["dept_name"].toString();
+        }
+        if (s["department"] != null && s["department"].toString().isNotEmpty) {
+          return s["department"].toString();
+        }
+        if (s["branch"] != null && s["branch"].toString().isNotEmpty) {
+          return s["branch"].toString();
+        }
+      }
+    }
+    return "All Departments";
+  }
+
   // =========================
   // DOWNLOAD PDF
   // =========================
   Future<void> downloadPDF() async {
     final pdf = pw.Document();
+
+    String safeStr(dynamic val) {
+      if (val == null) return "";
+      return val
+          .toString()
+          .replaceAll('’', "'")
+          .replaceAll('‘', "'")
+          .replaceAll('“', '"')
+          .replaceAll('”', '"')
+          .replaceAll('–', '-')
+          .replaceAll('—', '-')
+          .replaceAll('•', '*')
+          .replaceAll('…', '...');
+    }
+
     final now = DateTime.now();
-    final downloadedTime =
-        "${now.day}-${now.month}-${now.year} ${now.hour}:${now.minute}";
+    final downloadedTime = "${now.day.toString().padLeft(2, '0')}-"
+        "${now.month.toString().padLeft(2, '0')}-"
+        "${now.year}  "
+        "${now.hour.toString().padLeft(2, '0')}:"
+        "${now.minute.toString().padLeft(2, '0')}";
+
+    final String deptName = getDepartmentName();
 
     pdf.addPage(
-      pw.Page(
+      pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
-        build: (context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Header(
-                level: 0,
-                child: pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        margin: const pw.EdgeInsets.all(28),
+        header: (pw.Context context) {
+          return pw.Container(
+            margin: const pw.EdgeInsets.only(bottom: 16),
+            padding: const pw.EdgeInsets.all(12),
+            decoration: pw.BoxDecoration(
+              color: PdfColor.fromHex('#1E293B'),
+              borderRadius: pw.BorderRadius.circular(6),
+            ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Text("Student Registry",
-                        style: pw.TextStyle(
-                            fontSize: 24, fontWeight: pw.FontWeight.bold)),
-                    pw.Text("Year $selectedYear",
-                        style: const pw.TextStyle(fontSize: 18)),
+                    pw.Text(
+                      "SKILL SPHERE - STUDENT REGISTRY REPORT",
+                      style: pw.TextStyle(
+                        fontSize: 13,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.white,
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                    pw.SizedBox(height: 2),
+                    pw.Text(
+                      "Enrolled Students Directory",
+                      style: const pw.TextStyle(
+                        fontSize: 9,
+                        color: PdfColors.grey400,
+                      ),
+                    ),
                   ],
                 ),
-              ),
-              pw.SizedBox(height: 10),
-              pw.Text("Generated on: $downloadedTime",
-                  style: const pw.TextStyle(
-                      fontSize: 10, color: PdfColors.grey700)),
-              pw.SizedBox(height: 20),
-              pw.Table.fromTextArray(
-                headers: ["UID", "Name", "Email"],
-                headerStyle: pw.TextStyle(
-                    fontWeight: pw.FontWeight.bold, color: PdfColors.white),
-                headerDecoration:
-                    const pw.BoxDecoration(color: PdfColors.black),
-                rowDecoration: const pw.BoxDecoration(color: PdfColors.grey100),
-                cellAlignment: pw.Alignment.centerLeft,
-                data: students
-                    .map((s) => [
-                          s["uid"].toString(),
-                          s["name"].toString(),
-                          s["email"].toString(),
-                        ])
-                    .toList(),
-              ),
-            ],
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text(
+                      "Generated: $downloadedTime",
+                      style: pw.TextStyle(
+                        fontSize: 9,
+                        color: PdfColors.amber300,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           );
+        },
+        footer: (pw.Context context) {
+          return pw.Container(
+            margin: const pw.EdgeInsets.only(top: 12),
+            padding: const pw.EdgeInsets.only(top: 8),
+            decoration: pw.BoxDecoration(
+              border: pw.Border(top: pw.BorderSide(color: PdfColors.grey300, width: 0.5)),
+            ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(
+                  "Skill Sphere Official Directory",
+                  style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+                ),
+                pw.Text(
+                  "Page ${context.pageNumber} of ${context.pagesCount}",
+                  style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+                ),
+              ],
+            ),
+          );
+        },
+        build: (context) {
+          return [
+            // METADATA CARD
+            pw.Container(
+              padding: const pw.EdgeInsets.all(12),
+              margin: const pw.EdgeInsets.only(bottom: 16),
+              decoration: pw.BoxDecoration(
+                color: PdfColor.fromHex('#F8FAFC'),
+                borderRadius: pw.BorderRadius.circular(6),
+                border: pw.Border.all(color: PdfColor.fromHex('#E2E8F0')),
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        "Academic Year: Year $selectedYear",
+                        style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColor.fromHex('#0F172A')),
+                      ),
+                      pw.SizedBox(height: 3),
+                      pw.Text(
+                        "Department: ${safeStr(deptName)}",
+                        style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColor.fromHex('#2563EB')),
+                      ),
+                    ],
+                  ),
+                  pw.Container(
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: pw.BoxDecoration(
+                      color: PdfColor.fromHex('#DCFCE7'),
+                      borderRadius: pw.BorderRadius.circular(12),
+                      border: pw.Border.all(color: PdfColor.fromHex('#86EFAC')),
+                    ),
+                    child: pw.Text(
+                      "Total Students: ${students.length}",
+                      style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColor.fromHex('#166534')),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // TABLE
+            pw.Table.fromTextArray(
+              border: pw.TableBorder.all(color: PdfColor.fromHex('#E2E8F0'), width: 0.5),
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 9),
+              headerDecoration: pw.BoxDecoration(color: PdfColor.fromHex('#1E293B')),
+              rowDecoration: const pw.BoxDecoration(color: PdfColors.white),
+              cellAlignment: pw.Alignment.centerLeft,
+              cellPadding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              cellStyle: const pw.TextStyle(fontSize: 9),
+              headers: const ["UID", "Student Name", "Email Address"],
+              data: students
+                  .map((s) => [
+                        s["uid"].toString(),
+                        safeStr(s["name"]),
+                        safeStr(s["email"]),
+                      ])
+                  .toList(),
+            ),
+          ];
         },
       ),
     );
@@ -237,7 +421,7 @@ class _StudentsListPageState extends State<StudentsListPage> {
       final response = await http.delete(
         Uri.parse("$baseUrl/api/admin/student/$uid/delete"),
         headers: {
-          "Authorization": "Bearer ${widget.token}",
+          "Authorization": "Bearer ${widget.session.token}",
         },
       );
 
@@ -257,7 +441,8 @@ class _StudentsListPageState extends State<StudentsListPage> {
         setState(() => loading = false);
       }
     } catch (e) {
-      showError("Error deleting student: $e");
+      debugPrint("Delete student error: $e");
+      showError("Unable to connect to the server. Please try again.");
       setState(() => loading = false);
     }
   }
@@ -295,7 +480,63 @@ class _StudentsListPageState extends State<StudentsListPage> {
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: Colors.white.withOpacity(0.05)),
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Department Dropdown — super_admin/admin only
+                if (showDeptFilter) ...[
+                  loadingDepts
+                      ? const Padding(
+                          padding: EdgeInsets.only(bottom: 12),
+                          child: SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(
+                              color: AurumColors.accentGold,
+                              strokeWidth: 2,
+                            ),
+                          ),
+                        )
+                      : Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            decoration: BoxDecoration(
+                              color: AurumColors.backgroundBlack,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                  color: AurumColors.accentGold.withOpacity(0.5)),
+                            ),
+                            child: DropdownButtonHideUnderline(
+                              child: DropdownButton<int?>(
+                                value: selectedDeptId,
+                                isExpanded: true,
+                                dropdownColor: AurumColors.surfaceDark,
+                                icon: const Icon(Icons.arrow_drop_down,
+                                    color: AurumColors.accentGold),
+                                style: const TextStyle(
+                                    color: AurumColors.textWhite,
+                                    fontWeight: FontWeight.bold),
+                                items: [
+                                  const DropdownMenuItem<int?>(
+                                    value: null,
+                                    child: Text("All Departments"),
+                                  ),
+                                  ...departments.map((d) => DropdownMenuItem<int?>(
+                                        value: d["id"] as int,
+                                        child: Text("${d["name"]}"),
+                                      )),
+                                ],
+                                onChanged: (value) {
+                                  setState(() => selectedDeptId = value);
+                                  fetchStudents();
+                                },
+                              ),
+                            ),
+                          ),
+                        ),
+                ],
+                Row(
               children: [
                 // Year Dropdown
                 Container(
@@ -316,8 +557,10 @@ class _StudentsListPageState extends State<StudentsListPage> {
                           color: AurumColors.textWhite,
                           fontWeight: FontWeight.bold),
                       items: const [
+                        DropdownMenuItem(value: 1, child: Text("Year 1")),
                         DropdownMenuItem(value: 2, child: Text("Year 2")),
                         DropdownMenuItem(value: 3, child: Text("Year 3")),
+                        DropdownMenuItem(value: 4, child: Text("Year 4")),
                       ],
                       onChanged: (value) {
                         if (value == null) return;
@@ -340,6 +583,8 @@ class _StudentsListPageState extends State<StudentsListPage> {
                     icon: Icons.picture_as_pdf,
                     label: "PDF",
                     onTap: students.isEmpty ? null : downloadPDF),
+                  ],
+                ),
               ],
             ),
           ),
@@ -503,13 +748,14 @@ class _StudentsListPageState extends State<StudentsListPage> {
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            IconButton(
-              icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
-              tooltip: "Delete Student",
-              onPressed: () {
-                _confirmDelete(s);
-              },
-            ),
+            if (widget.session.canEditStudents)
+              IconButton(
+                icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent),
+                tooltip: "Delete Student",
+                onPressed: () {
+                  _confirmDelete(s);
+                },
+              ),
             const SizedBox(width: 4),
             Container(
               padding: const EdgeInsets.all(8),
@@ -527,7 +773,7 @@ class _StudentsListPageState extends State<StudentsListPage> {
             context,
             MaterialPageRoute(
               builder: (_) => StudentDetailPage(
-                token: widget.token,
+                session: widget.session,
                 uid: s["uid"].toString(),
               ),
             ),

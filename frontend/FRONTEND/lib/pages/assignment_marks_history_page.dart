@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:ui'; // Required for Glassmorphism
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'quiz_review_page.dart';
 
 class AssignmentMarksHistoryPage extends StatefulWidget {
   final String token;
@@ -19,7 +20,7 @@ class _AssignmentMarksHistoryPageState
   //            BACKEND LOGIC (PRESERVED)
   // ==========================================
 
-  final String baseUrl = "https://skillsphere1-0-0.onrender.com";
+  final String baseUrl = "http://localhost:5000";
 
   bool loading = true;
   String? error;
@@ -277,103 +278,128 @@ class _AssignmentMarksHistoryPageState
                                 ),
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(12),
-                                  child: IntrinsicHeight(
-                                    child: Row(
-                                      children: [
-                                        Container(width: 6, color: statusColor),
-                                        Expanded(
-                                          child: Padding(
-                                            padding: const EdgeInsets.all(16),
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Row(
-                                                  mainAxisAlignment:
-                                                      MainAxisAlignment
-                                                          .spaceBetween,
-                                                  children: [
-                                                    Text(
-                                                      "MISSION ID: ${h["quiz_id"] ?? "N/A"}",
-                                                      style: TextStyle(
-                                                          color: accentColor,
-                                                          fontFamily: 'Courier',
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                          fontSize: 12),
-                                                    ),
-                                                    Text(
-                                                      formatDate(
-                                                          h["quiz_date"]),
-                                                      style: const TextStyle(
-                                                          color: Colors.white38,
-                                                          fontSize: 12),
-                                                    ),
-                                                  ],
-                                                ),
-                                                const SizedBox(height: 8),
-                                                Row(
-                                                  children: [
-                                                    const Icon(Icons.person,
-                                                        color: Colors.white54,
-                                                        size: 14),
-                                                    const SizedBox(width: 6),
-                                                    Text(
-                                                      "Created by: ${h["created_by"] ?? "Faculty"}",
-                                                      style: const TextStyle(
-                                                          color: Colors.white70,
-                                                          fontSize: 14),
-                                                    ),
-                                                  ],
-                                                ),
-                                                const SizedBox(height: 12),
-                                                const Divider(
-                                                    color: Colors.white10),
-                                                const SizedBox(height: 12),
-                                                Row(
-                                                  mainAxisAlignment:
-                                                      MainAxisAlignment
-                                                          .spaceBetween,
-                                                  children: [
-                                                    const Text(
-                                                      "SCORE OBTAINED",
-                                                      style: TextStyle(
-                                                          color: Colors.white38,
-                                                          fontSize: 10,
-                                                          letterSpacing: 1.5),
-                                                    ),
-                                                    Container(
-                                                      padding: const EdgeInsets
-                                                          .symmetric(
-                                                          horizontal: 12,
-                                                          vertical: 4),
-                                                      decoration: BoxDecoration(
-                                                        color: statusColor
-                                                            .withOpacity(0.1),
-                                                        borderRadius:
-                                                            BorderRadius
-                                                                .circular(20),
-                                                        border: Border.all(
-                                                            color: statusColor
-                                                                .withOpacity(
-                                                                    0.3)),
-                                                      ),
-                                                      child: Text(
-                                                        "$score / $total",
+                                  child: InkWell(
+                                    onTap: null,
+                                    child: IntrinsicHeight(
+                                      child: Row(
+                                        children: [
+                                          Container(width: 6, color: statusColor),
+                                          Expanded(
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(16),
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                     h["quiz_name"] ?? "Faculty Quiz #${h['quiz_id']}",
+                                                     style: const TextStyle(
+                                                         color: Colors.white,
+                                                         fontWeight: FontWeight.bold,
+                                                         fontSize: 16),
+                                                   ),
+                                                   const SizedBox(height: 6),
+                                                   Row(
+                                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                     children: [
+                                                       Text(
+                                                         "MISSION ID: ${h["quiz_id"] ?? "N/A"}",
+                                                         style: TextStyle(
+                                                             color: accentColor,
+                                                             fontFamily: 'Courier',
+                                                             fontWeight: FontWeight.bold,
+                                                             fontSize: 11),
+                                                       ),
+                                                       Text(
+                                                         formatDate(h["quiz_date"]),
+                                                         style: const TextStyle(
+                                                             color: Colors.white38,
+                                                             fontSize: 11),
+                                                       ),
+                                                     ],
+                                                   ),
+                                                   const SizedBox(height: 6),
+                                                   Builder(builder: (context) {
+                                                     final String rawCreator = h["created_by"] ?? "Faculty";
+                                                     final String creator = (rawCreator.toLowerCase().contains("admin") || rawCreator.toLowerCase() == "system")
+                                                         ? "Admin"
+                                                         : rawCreator;
+                                                     final String st = h["quiz_start_time"] ?? "";
+                                                     final String et = h["quiz_end_time"] ?? "";
+                                                     return Column(
+                                                       crossAxisAlignment: CrossAxisAlignment.start,
+                                                       children: [
+                                                         Row(
+                                                           children: [
+                                                             const Icon(Icons.person,
+                                                                 color: Colors.white54,
+                                                                 size: 14),
+                                                             const SizedBox(width: 6),
+                                                             Text(
+                                                               "Organised by: $creator",
+                                                               style: const TextStyle(
+                                                                   color: Colors.white70,
+                                                                   fontSize: 13),
+                                                             ),
+                                                           ],
+                                                         ),
+                                                         if (st.isNotEmpty || et.isNotEmpty) ...[
+                                                           const SizedBox(height: 4),
+                                                           Row(
+                                                             children: [
+                                                               const Icon(Icons.access_time,
+                                                                   color: Colors.amberAccent,
+                                                                   size: 14),
+                                                               const SizedBox(width: 6),
+                                                               Text(
+                                                                 "Time: ${st.isNotEmpty ? st : '--'} - ${et.isNotEmpty ? et : '--'}",
+                                                                 style: const TextStyle(
+                                                                     color: Colors.amberAccent,
+                                                                     fontSize: 12),
+                                                               ),
+                                                             ],
+                                                           ),
+                                                         ],
+                                                       ],
+                                                     );
+                                                   }),
+                                                  const SizedBox(height: 12),
+                                                  const Divider(color: Colors.white10),
+                                                  const SizedBox(height: 12),
+                                                  Row(
+                                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                    children: [
+                                                      const Text(
+                                                        "SCORE OBTAINED",
                                                         style: TextStyle(
-                                                            color: statusColor,
-                                                            fontWeight:
-                                                                FontWeight
-                                                                    .bold),
+                                                            color: Colors.white38,
+                                                            fontSize: 10,
+                                                            letterSpacing: 1.5),
                                                       ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ],
+                                                      Container(
+                                                        padding: const EdgeInsets.symmetric(
+                                                            horizontal: 12,
+                                                            vertical: 4),
+                                                        decoration: BoxDecoration(
+                                                          color: statusColor.withOpacity(0.1),
+                                                          borderRadius: BorderRadius.circular(20),
+                                                          border: Border.all(
+                                                              color: statusColor.withOpacity(0.3)),
+                                                        ),
+                                                        child: Text(
+                                                          "$score / $total",
+                                                          style: TextStyle(
+                                                              color: statusColor,
+                                                              fontWeight: FontWeight.bold),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ],
+                                              ),
                                             ),
                                           ),
-                                        ),
-                                      ],
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ),

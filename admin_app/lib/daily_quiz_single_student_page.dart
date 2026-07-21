@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'admin_session.dart';
 
 // --- AURUM THEME COLORS ---
 class AurumColors {
@@ -28,11 +29,11 @@ class AurumColors {
 }
 
 class DailyQuizSingleStudentPage extends StatefulWidget {
-  final String token;
+  final AdminSession session;
 
   const DailyQuizSingleStudentPage({
     Key? key,
-    required this.token,
+    required this.session,
   }) : super(key: key);
 
   @override
@@ -45,7 +46,7 @@ class _DailyQuizSingleStudentPageState
   // =================================================
   // BASE URL
   // =================================================
-  final String baseUrl = "https://skillsphere1-0-0.onrender.com";
+  final String baseUrl = "http://localhost:5000";
 
   // =================================================
   // STATE
@@ -107,15 +108,14 @@ class _DailyQuizSingleStudentPageState
     });
 
     final uri = Uri.parse(
-      "$baseUrl/api/admin/daily-quiz/single-student"
-      "?uid=$uid&year=$selectedYear",
+      "$baseUrl/api/admin/daily-quiz/single-student?uid=$uid",
     );
 
     try {
       final response = await http.get(
         uri,
         headers: {
-          "Authorization": "Bearer ${widget.token}",
+          "Authorization": "Bearer ${widget.session.token}",
         },
       );
 
@@ -149,11 +149,12 @@ class _DailyQuizSingleStudentPageState
         }
       }
     } catch (e) {
+      debugPrint("Single-student quiz lookup error: $e");
       setState(() => loading = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Network error: $e"),
+            content: Text("Unable to connect to the server. Please try again."),
             backgroundColor: AurumColors.errorRed,
           ),
         );
@@ -167,6 +168,20 @@ class _DailyQuizSingleStudentPageState
   Future<void> generatePdf() async {
     final pdf = pw.Document();
 
+    String safeStr(dynamic val) {
+      if (val == null) return "";
+      return val
+          .toString()
+          .replaceAll('’', "'")
+          .replaceAll('‘', "'")
+          .replaceAll('“', '"')
+          .replaceAll('”', '"')
+          .replaceAll('–', '-')
+          .replaceAll('—', '-')
+          .replaceAll('•', '*')
+          .replaceAll('…', '...');
+    }
+
     final now = DateTime.now();
     final downloadedTime = "${now.day.toString().padLeft(2, '0')}-"
         "${now.month.toString().padLeft(2, '0')}-"
@@ -175,93 +190,142 @@ class _DailyQuizSingleStudentPageState
         "${now.minute.toString().padLeft(2, '0')}";
 
     pdf.addPage(
-      pw.Page(
+      pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
-        build: (context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Text(
-                "Daily Quiz Marks Report",
-                style: pw.TextStyle(
-                  fontSize: 20,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-              ),
-
-              pw.SizedBox(height: 6),
-
-              // DOWNLOADED TIME
-              pw.Text(
-                "Downloaded on: $downloadedTime",
-                style: pw.TextStyle(
-                  fontSize: 10,
-                  color: PdfColors.grey700,
-                ),
-              ),
-
-              pw.SizedBox(height: 12),
-
-              pw.Text("Name : $studentName"),
-              pw.Text("Email: $studentEmail"),
-              pw.Text("UID   : ${uidController.text}"),
-              pw.Text("Year  : $selectedYear"),
-
-              pw.SizedBox(height: 20),
-
-              pw.Table(
-                border: pw.TableBorder.all(),
-                children: [
-                  // HEADER
-                  pw.TableRow(
-                    decoration: const pw.BoxDecoration(
-                      color: PdfColors.grey300,
+        margin: const pw.EdgeInsets.all(28),
+        header: (pw.Context context) {
+          return pw.Container(
+            margin: const pw.EdgeInsets.only(bottom: 16),
+            padding: const pw.EdgeInsets.all(12),
+            decoration: pw.BoxDecoration(
+              color: PdfColor.fromHex('#1E293B'),
+              borderRadius: pw.BorderRadius.circular(6),
+            ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      "SKILL SPHERE - AI DAILY QUIZ REPORT",
+                      style: pw.TextStyle(
+                        fontSize: 13,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.white,
+                        letterSpacing: 1.0,
+                      ),
                     ),
+                    pw.SizedBox(height: 2),
+                    pw.Text(
+                      "Single Student Performance Analysis",
+                      style: const pw.TextStyle(
+                        fontSize: 9,
+                        color: PdfColors.grey400,
+                      ),
+                    ),
+                  ],
+                ),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text(
+                      "Generated: $downloadedTime",
+                      style: pw.TextStyle(
+                        fontSize: 9,
+                        color: PdfColors.amber300,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+        footer: (pw.Context context) {
+          return pw.Container(
+            margin: const pw.EdgeInsets.only(top: 12),
+            padding: const pw.EdgeInsets.only(top: 8),
+            decoration: pw.BoxDecoration(
+              border: pw.Border(top: pw.BorderSide(color: PdfColors.grey300, width: 0.5)),
+            ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(
+                  "Skill Sphere Official Analytics",
+                  style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+                ),
+                pw.Text(
+                  "Page ${context.pageNumber} of ${context.pagesCount}",
+                  style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+                ),
+              ],
+            ),
+          );
+        },
+        build: (pw.Context context) {
+          return [
+            // METADATA CARD
+            pw.Container(
+              padding: const pw.EdgeInsets.all(12),
+              margin: const pw.EdgeInsets.only(bottom: 16),
+              decoration: pw.BoxDecoration(
+                color: PdfColor.fromHex('#F8FAFC'),
+                borderRadius: pw.BorderRadius.circular(6),
+                border: pw.Border.all(color: PdfColor.fromHex('#E2E8F0')),
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.all(8),
-                        child: pw.Text(
-                          "Date",
-                          style: pw.TextStyle(
-                            fontWeight: pw.FontWeight.bold,
-                          ),
-                        ),
+                      pw.Text(
+                        "Student Name: ${safeStr(studentName)}",
+                        style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColor.fromHex('#0F172A')),
                       ),
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.all(8),
-                        child: pw.Text(
-                          "Marks",
-                          style: pw.TextStyle(
-                            fontWeight: pw.FontWeight.bold,
-                          ),
-                        ),
-                      ),
+                      pw.SizedBox(height: 3),
+                      pw.Text("Email: ${safeStr(studentEmail)}", style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                      pw.SizedBox(height: 3),
+                      pw.Text("UID: ${safeStr(uidController.text)}", style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
                     ],
                   ),
-
-                  // DATA
-                  ...marks.map(
-                    (m) => pw.TableRow(
-                      children: [
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.all(8),
-                          child: pw.Text(
-                            formatDate(m["quiz_date"]),
-                          ),
-                        ),
-                        pw.Padding(
-                          padding: const pw.EdgeInsets.all(8),
-                          child: pw.Text(
-                            "${m['score']}/${m['total']}",
-                          ),
-                        ),
-                      ],
+                  pw.Container(
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: pw.BoxDecoration(
+                      color: PdfColor.fromHex('#DCFCE7'),
+                      borderRadius: pw.BorderRadius.circular(12),
+                      border: pw.Border.all(color: PdfColor.fromHex('#86EFAC')),
+                    ),
+                    child: pw.Text(
+                      "Quizzes Attempted: ${marks.length}",
+                      style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColor.fromHex('#166534')),
                     ),
                   ),
                 ],
               ),
-            ],
-          );
+            ),
+
+            // TABLE
+            pw.Table.fromTextArray(
+              border: pw.TableBorder.all(color: PdfColor.fromHex('#E2E8F0'), width: 0.5),
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 9),
+              headerDecoration: pw.BoxDecoration(color: PdfColor.fromHex('#1E293B')),
+              rowDecoration: const pw.BoxDecoration(color: PdfColors.white),
+              cellAlignment: pw.Alignment.centerLeft,
+              cellPadding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              cellStyle: const pw.TextStyle(fontSize: 9),
+              headers: const ["Quiz Date", "Score Obtained"],
+              data: marks.map((m) {
+                return [
+                  safeStr(formatDate(m["quiz_date"])),
+                  "${m['score']} / ${m['total']}",
+                ];
+              }).toList(),
+            ),
+          ];
         },
       ),
     );
@@ -315,68 +379,29 @@ class _DailyQuizSingleStudentPageState
             ),
             child: Column(
               children: [
-                Row(
-                  children: [
-                    // Year Selector
-                    Expanded(
-                      flex: 2,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        decoration: BoxDecoration(
-                          color: AurumColors.backgroundBlack,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.white10),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: selectedYear,
-                            dropdownColor: AurumColors.surfaceDark,
-                            icon: const Icon(Icons.arrow_drop_down,
-                                color: AurumColors.accentGold),
-                            style: const TextStyle(
-                                color: AurumColors.textWhite,
-                                fontWeight: FontWeight.bold),
-                            items: const [
-                              DropdownMenuItem(
-                                  value: "2", child: Text("Year 2")),
-                              DropdownMenuItem(
-                                  value: "3", child: Text("Year 3")),
-                            ],
-                            onChanged: (v) => setState(() => selectedYear = v!),
-                          ),
-                        ),
-                      ),
+                TextField(
+                  controller: uidController,
+                  keyboardType: TextInputType.number,
+                  style: const TextStyle(color: AurumColors.textWhite),
+                  cursorColor: AurumColors.accentGold,
+                  decoration: InputDecoration(
+                    hintText: "Enter Student UID (e.g. 2400212)",
+                    hintStyle:
+                        const TextStyle(color: AurumColors.textGrey),
+                    filled: true,
+                    fillColor: AurumColors.backgroundBlack,
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 14),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
                     ),
-                    const SizedBox(width: 12),
-                    // UID Input
-                    Expanded(
-                      flex: 3,
-                      child: TextField(
-                        controller: uidController,
-                        keyboardType: TextInputType.number,
-                        style: const TextStyle(color: AurumColors.textWhite),
-                        cursorColor: AurumColors.accentGold,
-                        decoration: InputDecoration(
-                          hintText: "Enter Student UID",
-                          hintStyle:
-                              const TextStyle(color: AurumColors.textGrey),
-                          filled: true,
-                          fillColor: AurumColors.backgroundBlack,
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 14),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none,
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide:
-                                const BorderSide(color: AurumColors.accentGold),
-                          ),
-                        ),
-                      ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide:
+                          const BorderSide(color: AurumColors.accentGold),
                     ),
-                  ],
+                  ),
                 ),
                 const SizedBox(height: 16),
                 // Search Button

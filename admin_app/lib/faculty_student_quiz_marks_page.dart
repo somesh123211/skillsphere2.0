@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'admin_session.dart';
 
 // --- AURUM THEME COLORS ---
 class AurumColors {
@@ -28,11 +29,11 @@ class AurumColors {
 }
 
 class FacultyStudentQuizMarksPage extends StatefulWidget {
-  final String token;
+  final AdminSession session;
 
   const FacultyStudentQuizMarksPage({
     Key? key,
-    required this.token,
+    required this.session,
   }) : super(key: key);
 
   @override
@@ -42,7 +43,7 @@ class FacultyStudentQuizMarksPage extends StatefulWidget {
 
 class _FacultyStudentQuizMarksPageState
     extends State<FacultyStudentQuizMarksPage> {
-  final String baseUrl = "https://skillsphere1-0-0.onrender.com";
+  final String baseUrl = "http://localhost:5000";
 
   final TextEditingController uidCtrl = TextEditingController();
   int year = 2;
@@ -52,6 +53,7 @@ class _FacultyStudentQuizMarksPageState
 
   String studentName = "NOT GIVEN";
   String studentEmail = "NOT GIVEN";
+  int? resettingQuizId;
 
   // =========================
   // HELPERS
@@ -114,10 +116,10 @@ class _FacultyStudentQuizMarksPageState
     try {
       final response = await http.get(
         Uri.parse(
-          "$baseUrl/api/faculty/student/quiz-marks?uid=$uidText&year=$year",
+          "$baseUrl/api/faculty/student/quiz-marks?uid=$uidText",
         ),
         headers: {
-          "Authorization": "Bearer ${widget.token}",
+          "Authorization": "Bearer ${widget.session.token}",
         },
       );
 
@@ -153,60 +155,277 @@ class _FacultyStudentQuizMarksPageState
     }
   }
 
+  String formatTimeTaken(int? seconds) {
+    if (seconds == null) return "";
+    final m = seconds ~/ 60;
+    final s = seconds % 60;
+    return "${m}m ${s}s";
+  }
+
+  String formatClockTime(String? iso) {
+    if (iso == null || iso.isEmpty) return "";
+    try {
+      final dt = DateTime.parse(iso);
+      final h = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+      final ampm = dt.hour >= 12 ? "PM" : "AM";
+      return "${h.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')} $ampm";
+    } catch (_) {
+      return "";
+    }
+  }
+
+  // =========================
+  // RESET A STUDENT'S ATTEMPT ON ONE QUIZ
+  // =========================
+  Future<void> resetQuiz(Map<String, dynamic> quiz) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AurumColors.surfaceDark,
+        title: const Text("Reset Quiz?",
+            style: TextStyle(color: AurumColors.textWhite)),
+        content: Text(
+          "This will clear $studentName's attempt on quiz ${quiz["quiz_id"]}. "
+          "They will be able to take it again.",
+          style: const TextStyle(color: AurumColors.textGrey),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("Cancel",
+                style: TextStyle(color: AurumColors.textGrey)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text("Reset",
+                style: TextStyle(
+                    color: AurumColors.errorRed, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => resettingQuizId = quiz["quiz_id"] as int);
+
+    try {
+      final res = await http.post(
+        Uri.parse("$baseUrl/api/admin/faculty-quiz/reset-student"),
+        headers: {
+          "Authorization": "Bearer ${widget.session.token}",
+          "Content-Type": "application/json",
+        },
+        body: jsonEncode({
+          "quiz_id": quiz["quiz_id"],
+          "uid": int.parse(uidCtrl.text.trim()),
+        }),
+      );
+
+      final decoded = jsonDecode(res.body);
+
+      if (decoded["success"] == true) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                  "$studentName's attempt on quiz ${quiz["quiz_id"]} has been reset"),
+              backgroundColor: AurumColors.successGreen,
+            ),
+          );
+        }
+        await fetchMarks();
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(decoded["message"] ?? "Failed to reset quiz"),
+            backgroundColor: AurumColors.errorRed,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint("Faculty student quiz marks error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Unable to connect to the server. Please try again."),
+            backgroundColor: AurumColors.errorRed,
+          ),
+        );
+      }
+    }
+
+    if (mounted) setState(() => resettingQuizId = null);
+  }
+
   // =========================
   // GENERATE PDF
   // =========================
   Future<void> generatePdf() async {
     final doc = pw.Document();
 
+    String safeStr(dynamic val) {
+      if (val == null) return "";
+      return val
+          .toString()
+          .replaceAll('’', "'")
+          .replaceAll('‘', "'")
+          .replaceAll('“', '"')
+          .replaceAll('”', '"')
+          .replaceAll('–', '-')
+          .replaceAll('—', '-')
+          .replaceAll('•', '*')
+          .replaceAll('…', '...');
+    }
+
+    final String generatedTime = downloadedTimestamp();
+
     doc.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
-        build: (context) => [
-          pw.Text(
-            "Student Quiz Marks Report",
-            style: pw.TextStyle(
-              fontSize: 20,
-              fontWeight: pw.FontWeight.bold,
+        margin: const pw.EdgeInsets.all(28),
+        header: (pw.Context context) {
+          return pw.Container(
+            margin: const pw.EdgeInsets.only(bottom: 16),
+            padding: const pw.EdgeInsets.all(12),
+            decoration: pw.BoxDecoration(
+              color: PdfColor.fromHex('#1E293B'),
+              borderRadius: pw.BorderRadius.circular(6),
             ),
-          ),
-          pw.SizedBox(height: 6),
-          pw.Text(
-            "Downloaded on: ${downloadedTimestamp()}",
-            style: pw.TextStyle(
-              fontSize: 10,
-              color: PdfColors.grey700,
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      "SKILL SPHERE - STUDENT PERFORMANCE REPORT",
+                      style: pw.TextStyle(
+                        fontSize: 13,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.white,
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                    pw.SizedBox(height: 2),
+                    pw.Text(
+                      "Faculty Quiz Analysis",
+                      style: const pw.TextStyle(
+                        fontSize: 9,
+                        color: PdfColors.grey400,
+                      ),
+                    ),
+                  ],
+                ),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text(
+                      "Generated: $generatedTime",
+                      style: pw.TextStyle(
+                        fontSize: 9,
+                        color: PdfColors.amber300,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-          ),
-          pw.SizedBox(height: 12),
-          pw.Text("Student Name : $studentName"),
-          pw.Text("Email        : $studentEmail"),
-          pw.Text("UID          : ${uidCtrl.text}"),
-          pw.Text("Year         : ${year == 2 ? "Second Year" : "Third Year"}"),
-          pw.SizedBox(height: 15),
-          pw.Table.fromTextArray(
-            headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-            headers: const [
-              "Quiz ID",
-              "Date",
-              "Time Slot",
-              "Marks",
-              "Created By",
-            ],
-            data: data.map((q) {
-              final isNotGiven = q["marks"] == "NOT GIVEN";
-              return [
-                q["quiz_id"].toString(),
-                formatDate(q["quiz_date"]),
-                formatTime(q["start_time"], q["end_time"]),
-                isNotGiven
-                    ? "NOT GIVEN"
-                    : "${q["marks"]} / ${q["total_marks"]}",
-                hasValue(q["created_by"]) ? q["created_by"] : "NOT GIVEN",
-              ];
-            }).toList(),
-          ),
-        ],
+          );
+        },
+        footer: (pw.Context context) {
+          return pw.Container(
+            margin: const pw.EdgeInsets.only(top: 12),
+            padding: const pw.EdgeInsets.only(top: 8),
+            decoration: pw.BoxDecoration(
+              border: pw.Border(top: pw.BorderSide(color: PdfColors.grey300, width: 0.5)),
+            ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(
+                  "Skill Sphere Official Analytics",
+                  style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+                ),
+                pw.Text(
+                  "Page ${context.pageNumber} of ${context.pagesCount}",
+                  style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+                ),
+              ],
+            ),
+          );
+        },
+        build: (pw.Context context) {
+          return [
+            // METADATA CARD
+            pw.Container(
+              padding: const pw.EdgeInsets.all(12),
+              margin: const pw.EdgeInsets.only(bottom: 16),
+              decoration: pw.BoxDecoration(
+                color: PdfColor.fromHex('#F8FAFC'),
+                borderRadius: pw.BorderRadius.circular(6),
+                border: pw.Border.all(color: PdfColor.fromHex('#E2E8F0')),
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(
+                        "Student Name: ${safeStr(studentName)}",
+                        style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColor.fromHex('#0F172A')),
+                      ),
+                      pw.SizedBox(height: 3),
+                      pw.Text("Email: ${safeStr(studentEmail)}", style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                      pw.SizedBox(height: 3),
+                      pw.Text("UID: ${safeStr(uidCtrl.text)}", style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                    ],
+                  ),
+                  pw.Container(
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: pw.BoxDecoration(
+                      color: PdfColor.fromHex('#FEF3C7'),
+                      borderRadius: pw.BorderRadius.circular(12),
+                      border: pw.Border.all(color: PdfColor.fromHex('#FDE68A')),
+                    ),
+                    child: pw.Text(
+                      "Total Quizzes: ${data.length}",
+                      style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColor.fromHex('#92400E')),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // TABLE
+            pw.Table.fromTextArray(
+              border: pw.TableBorder.all(color: PdfColor.fromHex('#E2E8F0'), width: 0.5),
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 9),
+              headerDecoration: pw.BoxDecoration(color: PdfColor.fromHex('#1E293B')),
+              rowDecoration: const pw.BoxDecoration(color: PdfColors.white),
+              cellAlignment: pw.Alignment.centerLeft,
+              cellPadding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              cellStyle: const pw.TextStyle(fontSize: 9),
+              headers: const ["Quiz ID", "Quiz Title", "Date", "Time Slot", "Marks", "Organised By"],
+              data: data.map((q) {
+                final isNotGiven = q["marks"] == "NOT GIVEN";
+                final qName = q["quiz_name"] != null && q["quiz_name"].toString().isNotEmpty
+                    ? q["quiz_name"].toString()
+                    : "Faculty Quiz #${q['quiz_id']}";
+                return [
+                  q["quiz_id"].toString(),
+                  safeStr(qName),
+                  safeStr(formatDate(q["quiz_date"])),
+                  safeStr(formatTime(q["start_time"], q["end_time"])),
+                  isNotGiven ? "NOT GIVEN" : "${q["marks"]} / ${q["total_marks"]}",
+                  safeStr(hasValue(q["created_by"]) ? q["created_by"] : "Admin"),
+                ];
+              }).toList(),
+            ),
+          ];
+        },
       ),
     );
 
@@ -259,66 +478,29 @@ class _FacultyStudentQuizMarksPageState
             ),
             child: Column(
               children: [
-                Row(
-                  children: [
-                    // UID Input
-                    Expanded(
-                      flex: 3,
-                      child: TextField(
-                        controller: uidCtrl,
-                        keyboardType: TextInputType.number,
-                        style: const TextStyle(color: AurumColors.textWhite),
-                        cursorColor: AurumColors.accentGold,
-                        decoration: InputDecoration(
-                          hintText: "Enter UID",
-                          hintStyle:
-                              const TextStyle(color: AurumColors.textGrey),
-                          filled: true,
-                          fillColor: AurumColors.backgroundBlack,
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 14),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none,
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide:
-                                const BorderSide(color: AurumColors.accentGold),
-                          ),
-                        ),
-                      ),
+                TextField(
+                  controller: uidCtrl,
+                  keyboardType: TextInputType.number,
+                  style: const TextStyle(color: AurumColors.textWhite),
+                  cursorColor: AurumColors.accentGold,
+                  decoration: InputDecoration(
+                    hintText: "Enter Student UID (e.g. 2400212)",
+                    hintStyle:
+                        const TextStyle(color: AurumColors.textGrey),
+                    filled: true,
+                    fillColor: AurumColors.backgroundBlack,
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 14),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
                     ),
-                    const SizedBox(width: 12),
-                    // Year Dropdown
-                    Expanded(
-                      flex: 2,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        decoration: BoxDecoration(
-                          color: AurumColors.backgroundBlack,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.white10),
-                        ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<int>(
-                            value: year,
-                            dropdownColor: AurumColors.surfaceDark,
-                            icon: const Icon(Icons.arrow_drop_down,
-                                color: AurumColors.accentGold),
-                            style: const TextStyle(
-                                color: AurumColors.textWhite,
-                                fontWeight: FontWeight.bold),
-                            items: const [
-                              DropdownMenuItem(value: 2, child: Text("Year 2")),
-                              DropdownMenuItem(value: 3, child: Text("Year 3")),
-                            ],
-                            onChanged: (v) => setState(() => year = v!),
-                          ),
-                        ),
-                      ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide:
+                          const BorderSide(color: AurumColors.accentGold),
                     ),
-                  ],
+                  ),
                 ),
                 const SizedBox(height: 16),
                 // Search Button
@@ -495,30 +677,68 @@ class _FacultyStudentQuizMarksPageState
                                                 color: AurumColors.textGrey,
                                                 fontSize: 11),
                                           ),
+                                        if (q["time_taken_seconds"] != null)
+                                          Text(
+                                            "Started ${formatClockTime(q["started_at"])} · Submitted ${formatClockTime(q["submitted_at"])} · ${formatTimeTaken(q["time_taken_seconds"])}",
+                                            style: const TextStyle(
+                                                color: AurumColors.textGrey,
+                                                fontSize: 11),
+                                          ),
                                       ],
                                     ),
-                                    trailing: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 12, vertical: 6),
-                                      decoration: BoxDecoration(
-                                        color: isNotGiven
-                                            ? AurumColors.errorRed
-                                                .withOpacity(0.1)
-                                            : AurumColors.successGreen
-                                                .withOpacity(0.1),
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                      child: Text(
-                                        isNotGiven
-                                            ? "Absent"
-                                            : "${q["marks"]} / ${q["total_marks"]}",
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          color: isNotGiven
-                                              ? AurumColors.errorRed
-                                              : AurumColors.successGreen,
+                                    trailing: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 12, vertical: 6),
+                                          decoration: BoxDecoration(
+                                            color: isNotGiven
+                                                ? AurumColors.errorRed
+                                                    .withOpacity(0.1)
+                                                : AurumColors.successGreen
+                                                    .withOpacity(0.1),
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                          ),
+                                          child: Text(
+                                            isNotGiven
+                                                ? "Absent"
+                                                : "${q["marks"]} / ${q["total_marks"]}",
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: isNotGiven
+                                                  ? AurumColors.errorRed
+                                                  : AurumColors.successGreen,
+                                            ),
+                                          ),
                                         ),
-                                      ),
+                                        if (q["can_reset"] == true) ...[
+                                          const SizedBox(width: 6),
+                                          resettingQuizId == q["quiz_id"]
+                                              ? const SizedBox(
+                                                  height: 18,
+                                                  width: 18,
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                    color:
+                                                        AurumColors.accentGold,
+                                                    strokeWidth: 2,
+                                                  ),
+                                                )
+                                              : IconButton(
+                                                  icon: const Icon(
+                                                      Icons.restart_alt_rounded,
+                                                      color: AurumColors
+                                                          .accentGold,
+                                                      size: 20),
+                                                  tooltip:
+                                                      "Reset this attempt",
+                                                  onPressed: () =>
+                                                      resetQuiz(q),
+                                                ),
+                                        ],
+                                      ],
                                     ),
                                   ),
                                 );

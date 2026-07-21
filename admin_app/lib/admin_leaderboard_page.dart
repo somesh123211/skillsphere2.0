@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+import 'admin_session.dart';
 
 // --- AURUM THEME COLORS ---
 class AurumColors {
@@ -31,11 +32,11 @@ class AurumColors {
 }
 
 class AdminLeaderboardPage extends StatefulWidget {
-  final String token;
+  final AdminSession session;
 
   const AdminLeaderboardPage({
     Key? key,
-    required this.token,
+    required this.session,
   }) : super(key: key);
 
   @override
@@ -43,7 +44,7 @@ class AdminLeaderboardPage extends StatefulWidget {
 }
 
 class _AdminLeaderboardPageState extends State<AdminLeaderboardPage> {
-  final String baseUrl = "https://skillsphere1-0-0.onrender.com";
+  final String baseUrl = "http://localhost:5000";
 
   int year = 2;
   String type = "all"; // all | month
@@ -51,6 +52,40 @@ class _AdminLeaderboardPageState extends State<AdminLeaderboardPage> {
 
   bool loading = false;
   List leaderboard = [];
+
+  // Department filter — only super_admin/admin get a free choice; hod/
+  // faculty are already forced to their own department server-side.
+  bool get showDeptFilter => widget.session.isSuperAdmin;
+  List<Map<String, dynamic>> departments = [];
+  int? selectedDeptId;
+  bool loadingDepts = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (showDeptFilter) {
+      fetchDepartments();
+    }
+  }
+
+  Future<void> fetchDepartments() async {
+    setState(() => loadingDepts = true);
+    try {
+      final response = await http.get(
+        Uri.parse("$baseUrl/api/admin/departments"),
+        headers: {"Authorization": "Bearer ${widget.session.token}"},
+      );
+      final data = jsonDecode(response.body);
+      if (data["success"] == true) {
+        setState(() {
+          departments = List<Map<String, dynamic>>.from(data["departments"]);
+        });
+      }
+    } catch (e) {
+      // Filter just stays on "All Departments" if this fails.
+    }
+    setState(() => loadingDepts = false);
+  }
 
   // =========================
   // MONTH NAMES MAP
@@ -92,15 +127,19 @@ class _AdminLeaderboardPageState extends State<AdminLeaderboardPage> {
     });
 
     final uri = Uri.parse(
-      "$baseUrl/api/admin/leaderboard/daily"
-      "?year=$year&type=$type${type == "month" ? "&month=$month" : ""}",
-    );
+      "$baseUrl/api/admin/leaderboard/daily",
+    ).replace(queryParameters: {
+      "year": "$year",
+      "type": type,
+      if (type == "month") "month": month,
+      if (selectedDeptId != null) "dept_id": "$selectedDeptId",
+    });
 
     try {
       final res = await http.get(
         uri,
         headers: {
-          "Authorization": "Bearer ${widget.token}",
+          "Authorization": "Bearer ${widget.session.token}",
         },
       );
 
@@ -126,55 +165,158 @@ class _AdminLeaderboardPageState extends State<AdminLeaderboardPage> {
   Future<void> exportPdf() async {
     final pdf = pw.Document();
 
+    String safeStr(dynamic val) {
+      if (val == null) return "";
+      return val
+          .toString()
+          .replaceAll('’', "'")
+          .replaceAll('‘', "'")
+          .replaceAll('“', '"')
+          .replaceAll('”', '"')
+          .replaceAll('–', '-')
+          .replaceAll('—', '-')
+          .replaceAll('•', '*')
+          .replaceAll('…', '...');
+    }
+
+    final String generatedTime = downloadedTimestamp();
+
     pdf.addPage(
-      pw.Page(
-        build: (_) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              pw.Text(
-                "Daily Quiz Leaderboard",
-                style: pw.TextStyle(
-                  fontSize: 18,
-                  fontWeight: pw.FontWeight.bold,
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(28),
+        header: (pw.Context context) {
+          return pw.Container(
+            margin: const pw.EdgeInsets.only(bottom: 16),
+            padding: const pw.EdgeInsets.all(12),
+            decoration: pw.BoxDecoration(
+              color: PdfColor.fromHex('#1E293B'),
+              borderRadius: pw.BorderRadius.circular(6),
+            ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      "SKILL SPHERE - LEADERBOARD RANKINGS",
+                      style: pw.TextStyle(
+                        fontSize: 13,
+                        fontWeight: pw.FontWeight.bold,
+                        color: PdfColors.white,
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                    pw.SizedBox(height: 2),
+                    pw.Text(
+                      "AI Quiz Performance Leaderboard",
+                      style: const pw.TextStyle(
+                        fontSize: 9,
+                        color: PdfColors.grey400,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              pw.SizedBox(height: 6),
-              pw.Text(
-                "Downloaded on: ${downloadedTimestamp()}",
-                style: pw.TextStyle(
-                  fontSize: 10,
-                  color: PdfColors.grey700,
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text(
+                      "Generated: $generatedTime",
+                      style: pw.TextStyle(
+                        fontSize: 9,
+                        color: PdfColors.amber300,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              pw.SizedBox(height: 10),
-              pw.Text("Year: $year"),
-              pw.Text(
-                "Type: ${type == "all" ? "All Time" : monthNames[month]}",
-              ),
-              pw.SizedBox(height: 16),
-              pw.Table.fromTextArray(
-                headers: const [
-                  "Rank",
-                  "UID",
-                  "Total Marks / Out Of",
-                ],
-                headerStyle: pw.TextStyle(
-                    fontWeight: pw.FontWeight.bold, color: PdfColors.white),
-                headerDecoration:
-                    const pw.BoxDecoration(color: PdfColors.black),
-                rowDecoration: const pw.BoxDecoration(color: PdfColors.grey100),
-                data: List.generate(leaderboard.length, (index) {
-                  final row = leaderboard[index];
-                  return [
-                    (index + 1).toString(),
-                    row["uid"].toString(),
-                    "${row["total_marks"]} / ${row["total_out_of"]}",
-                  ];
-                }),
-              ),
-            ],
+              ],
+            ),
           );
+        },
+        footer: (pw.Context context) {
+          return pw.Container(
+            margin: const pw.EdgeInsets.only(top: 12),
+            padding: const pw.EdgeInsets.only(top: 8),
+            decoration: pw.BoxDecoration(
+              border: pw.Border(top: pw.BorderSide(color: PdfColors.grey300, width: 0.5)),
+            ),
+            child: pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              children: [
+                pw.Text(
+                  "Skill Sphere Official Rankings",
+                  style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+                ),
+                pw.Text(
+                  "Page ${context.pageNumber} of ${context.pagesCount}",
+                  style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+                ),
+              ],
+            ),
+          );
+        },
+        build: (_) {
+          return [
+            // METADATA CARD
+            pw.Container(
+              padding: const pw.EdgeInsets.all(12),
+              margin: const pw.EdgeInsets.only(bottom: 16),
+              decoration: pw.BoxDecoration(
+                color: PdfColor.fromHex('#F8FAFC'),
+                borderRadius: pw.BorderRadius.circular(6),
+                border: pw.Border.all(color: PdfColor.fromHex('#E2E8F0')),
+              ),
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text("Academic Year: Year $year", style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColor.fromHex('#0F172A'))),
+                      pw.SizedBox(height: 3),
+                      pw.Text("Filter Type: ${type == "all" ? "All Time" : monthNames[month]}", style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                    ],
+                  ),
+                  pw.Container(
+                    padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: pw.BoxDecoration(
+                      color: PdfColor.fromHex('#FEF3C7'),
+                      borderRadius: pw.BorderRadius.circular(12),
+                      border: pw.Border.all(color: PdfColor.fromHex('#FDE68A')),
+                    ),
+                    child: pw.Text(
+                      "Ranked Students: ${leaderboard.length}",
+                      style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColor.fromHex('#92400E')),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // TABLE
+            pw.Table.fromTextArray(
+              border: pw.TableBorder.all(color: PdfColor.fromHex('#E2E8F0'), width: 0.5),
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold, color: PdfColors.white, fontSize: 9),
+              headerDecoration: pw.BoxDecoration(color: PdfColor.fromHex('#1E293B')),
+              rowDecoration: const pw.BoxDecoration(color: PdfColors.white),
+              cellAlignment: pw.Alignment.centerLeft,
+              cellPadding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              cellStyle: const pw.TextStyle(fontSize: 9),
+              headers: const ["Rank", "Student UID", "Student Name", "Total Score / Out Of"],
+              data: List.generate(leaderboard.length, (index) {
+                final row = leaderboard[index];
+                final String sName = row["name"] != null && row["name"].toString().isNotEmpty ? row["name"].toString() : "N/A";
+                return [
+                  "#${index + 1}",
+                  row["uid"].toString(),
+                  safeStr(sName),
+                  "${row["total_marks"]} / ${row["total_out_of"]}",
+                ];
+              }),
+            ),
+          ];
         },
       ),
     );
@@ -231,6 +373,38 @@ class _AdminLeaderboardPageState extends State<AdminLeaderboardPage> {
             ),
             child: Column(
               children: [
+                if (showDeptFilter) ...[
+                  loadingDepts
+                      ? const Padding(
+                          padding: EdgeInsets.only(bottom: 12),
+                          child: SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(
+                              color: AurumColors.accentGold,
+                              strokeWidth: 2,
+                            ),
+                          ),
+                        )
+                      : Padding(
+                          padding: const EdgeInsets.only(bottom: 12),
+                          child: _buildFilterDropdown<int?>(
+                            label: "Department",
+                            value: selectedDeptId,
+                            items: [
+                              const DropdownMenuItem<int?>(
+                                value: null,
+                                child: Text("All Departments"),
+                              ),
+                              ...departments.map((d) => DropdownMenuItem<int?>(
+                                    value: d["id"] as int,
+                                    child: Text("${d["name"]}"),
+                                  )),
+                            ],
+                            onChanged: (v) => setState(() => selectedDeptId = v),
+                          ),
+                        ),
+                ],
                 Row(
                   children: [
                     // Year Selector
@@ -239,8 +413,10 @@ class _AdminLeaderboardPageState extends State<AdminLeaderboardPage> {
                         label: "Year",
                         value: year,
                         items: const [
+                          DropdownMenuItem(value: 1, child: Text("Year 1")),
                           DropdownMenuItem(value: 2, child: Text("Year 2")),
                           DropdownMenuItem(value: 3, child: Text("Year 3")),
+                          DropdownMenuItem(value: 4, child: Text("Year 4")),
                         ],
                         onChanged: (v) {
                           if (v != null) setState(() => year = v);

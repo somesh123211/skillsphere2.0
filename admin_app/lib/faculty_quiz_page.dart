@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'add_quiz_page.dart';
-import 'add_questions_page.dart';
-import 'delete_quiz_page.dart';
-import 'view_quiz_page.dart';
+import 'add_faculty_quiz_page.dart';
+import 'faculty_quiz_list_page.dart';
+import 'admin_session.dart';
 
 // --- AURUM THEME COLORS ---
 class AurumColors {
@@ -30,9 +29,9 @@ class AurumColors {
 }
 
 class FacultyQuizPage extends StatelessWidget {
-  final String token;
+  final AdminSession session;
 
-  const FacultyQuizPage({Key? key, required this.token}) : super(key: key);
+  const FacultyQuizPage({Key? key, required this.session}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -68,82 +67,36 @@ class FacultyQuizPage extends StatelessWidget {
             const SizedBox(height: 16),
 
             // =========================
-            // ADD QUIZ
+            // CREATE QUIZ (name, time, duration + CSV upload, all in one)
             // =========================
             _buildActionCard(
               context,
-              title: "Create New Quiz",
-              subtitle: "Set up topic, date, and time",
+              title: "Create Quiz",
+              subtitle: "Name, schedule, duration and CSV questions in one step",
               icon: Icons.note_add_outlined,
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => AddQuizPage(token: token)),
+                  MaterialPageRoute(
+                      builder: (_) => AddFacultyQuizPage(session: session)),
                 );
               },
             ),
             const SizedBox(height: 16),
 
             // =========================
-            // ADD QUESTIONS
+            // MY QUIZZES (view / delete / class marks)
             // =========================
             _buildActionCard(
               context,
-              title: "Upload Questions",
-              subtitle: "Import CSV to existing quiz",
-              icon: Icons.upload_file_outlined,
+              title: "My Quizzes",
+              subtitle: "View, delete, or see class marks for a quiz",
+              icon: Icons.list_alt_outlined,
               onTap: () {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                      builder: (_) => AddQuestionsPage(token: token)),
-                );
-              },
-            ),
-            const SizedBox(height: 16),
-
-            // =========================
-            // VIEW QUIZ
-            // =========================
-            _buildActionCard(
-              context,
-              title: "View Quiz Details",
-              subtitle: "Check questions and status",
-              icon: Icons.visibility_outlined,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => ViewQuizPage(token: token)),
-                );
-              },
-            ),
-
-            const SizedBox(height: 32),
-            const Text(
-              "DANGER ZONE",
-              style: TextStyle(
-                color: AurumColors.errorRed,
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.5,
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // =========================
-            // DELETE QUIZ
-            // =========================
-            _buildActionCard(
-              context,
-              title: "Delete Quiz",
-              subtitle: "Permanently remove a quiz",
-              icon: Icons.delete_outline,
-              isDestructive: true,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => DeleteQuizPage(token: token)),
+                      builder: (_) => FacultyQuizListPage(session: session)),
                 );
               },
             ),

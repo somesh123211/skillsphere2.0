@@ -30,7 +30,7 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   bool _showPass = false;
   bool _showConfirm = false;
 
-  final baseUrl = "https://skillsphere1-0-0.onrender.com";
+  final baseUrl = "http://localhost:5000";
 
   void showMsg(String msg, {bool isError = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -120,8 +120,25 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   }
 
   Future<void> resetPassword() async {
-    if (passCtrl.text.length < 6) {
-      showMsg("Password too short", isError: true);
+    final pw = passCtrl.text;
+    if (pw.length < 8) {
+      showMsg("Password must be at least 8 characters", isError: true);
+      return;
+    }
+    if (!RegExp(r'[A-Z]').hasMatch(pw)) {
+      showMsg("Password needs at least one uppercase letter", isError: true);
+      return;
+    }
+    if (!RegExp(r'[a-z]').hasMatch(pw)) {
+      showMsg("Password needs at least one lowercase letter", isError: true);
+      return;
+    }
+    if (!RegExp(r'[0-9]').hasMatch(pw)) {
+      showMsg("Password needs at least one digit", isError: true);
+      return;
+    }
+    if (!RegExp(r'[^A-Za-z0-9]').hasMatch(pw)) {
+      showMsg("Password needs at least one special character", isError: true);
       return;
     }
 
@@ -237,6 +254,14 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
                             showPass: _showPass,
                             onToggle: () =>
                                 setState(() => _showPass = !_showPass),
+                          ),
+                          const SizedBox(height: 4),
+                          const Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              "8+ characters, with uppercase, lowercase, a digit and a special character.",
+                              style: TextStyle(color: Colors.white70, fontSize: 11),
+                            ),
                           ),
                           const SizedBox(height: 16),
                           _GlassField(

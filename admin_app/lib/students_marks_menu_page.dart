@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'daily_quiz_marks_select_page.dart';
 import 'faculty_quiz_marks_menu_page.dart';
 import 'admin_leaderboard_page.dart';
+import 'admin_session.dart';
 
 // --- AURUM THEME COLORS ---
 class AurumColors {
@@ -24,12 +25,11 @@ class AurumColors {
 }
 
 class StudentsMarksMenuPage extends StatelessWidget {
-  // ✅ ADMIN TOKEN (RECEIVED FROM DASHBOARD)
-  final String token;
+  final AdminSession session;
 
   const StudentsMarksMenuPage({
     Key? key,
-    required this.token,
+    required this.session,
   }) : super(key: key);
 
   @override
@@ -69,7 +69,7 @@ class StudentsMarksMenuPage extends StatelessWidget {
             // =========================
             _buildActionCard(
               context,
-              title: "Daily Quiz Reports",
+              title: "Ai Quiz Reports",
               subtitle: "View daily performance records",
               icon: Icons.calendar_month_outlined,
               onTap: () {
@@ -77,7 +77,7 @@ class StudentsMarksMenuPage extends StatelessWidget {
                   context,
                   MaterialPageRoute(
                     builder: (_) => DailyQuizMarksSelectPage(
-                      token: token,
+                      session: session,
                     ),
                   ),
                 );
@@ -99,7 +99,7 @@ class StudentsMarksMenuPage extends StatelessWidget {
                   context,
                   MaterialPageRoute(
                     builder: (_) => FacultyQuizMarksMenuPage(
-                      token: token,
+                      session: session,
                     ),
                   ),
                 );
@@ -132,7 +132,7 @@ class StudentsMarksMenuPage extends StatelessWidget {
                   context,
                   MaterialPageRoute(
                     builder: (_) => AdminLeaderboardPage(
-                      token: token,
+                      session: session,
                     ),
                   ),
                 );

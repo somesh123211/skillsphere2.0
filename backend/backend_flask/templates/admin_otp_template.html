@@ -54,12 +54,16 @@
       <tr>
         <td style="color:#374151;">
 
-          <p style="font-size:15px; margin:0 0 14px 0;">
-            Dear Administrator,
+          <p style="font-size:15px; margin:0 0 2px 0;">
+            Dear {{name}},
+          </p>
+
+          <p style="font-size:12px; margin:0 0 16px 0; color:#2563eb; font-weight:700; letter-spacing:0.3px;">
+            {{designation}}
           </p>
 
           <p style="font-size:15px; margin:0 0 18px 0; line-height:1.6;">
-            We received a request to for OTP.
+            We received a request to {{action_text}} for your
             <strong>Admin Portal</strong> account.
           </p>
 
@@ -88,7 +92,7 @@
           </p>
 
           <p style="font-size:14px; margin:0 0 16px 0; color:#6b7280; line-height:1.6;">
-            If you did not request a password reset, you can safely ignore
+            If you did not request to {{action_text}}, you can safely ignore
             this email. Your account will remain secure.
           </p>
 

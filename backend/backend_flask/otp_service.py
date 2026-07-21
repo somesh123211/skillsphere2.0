@@ -65,7 +65,7 @@ def send_otp_email(email):
 
     send_email_smtp(
         email,
-        "Your Verification Code — Placement Portal",
+        "Your Verification Code — Skill Sphere",
         html_body
     )
 

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 // Pages to navigate
 import 'faculty_student_quiz_marks_page.dart';
 import 'faculty_quiz_wise_marks_page.dart';
+import 'admin_session.dart';
 
 // --- AURUM THEME COLORS ---
 class AurumColors {
@@ -23,11 +24,11 @@ class AurumColors {
 }
 
 class FacultyQuizMarksMenuPage extends StatelessWidget {
-  final String token;
+  final AdminSession session;
 
   const FacultyQuizMarksMenuPage({
     Key? key,
-    required this.token,
+    required this.session,
   }) : super(key: key);
 
   @override
@@ -69,7 +70,7 @@ class FacultyQuizMarksMenuPage extends StatelessWidget {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => FacultyStudentQuizMarksPage(token: token),
+                    builder: (_) => FacultyStudentQuizMarksPage(session: session),
                   ),
                 );
               },
@@ -90,7 +91,7 @@ class FacultyQuizMarksMenuPage extends StatelessWidget {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (_) => FacultyQuizWiseMarksPage(token: token),
+                    builder: (_) => FacultyQuizWiseMarksPage(session: session),
                   ),
                 );
               },

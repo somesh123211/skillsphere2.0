@@ -27,7 +27,7 @@ class ForgotPasswordPage extends StatefulWidget {
 
 class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
   final emailCtrl = TextEditingController();
-  final baseUrl = "https://skillsphere1-0-0.onrender.com"; // Updated to match your Login Page config
+  final baseUrl = "http://localhost:5000"; // Updated to match your Login Page config
 
   Future<void> sendOtp() async {
     // Basic validation to prevent empty calls
@@ -65,10 +65,11 @@ class _ForgotPasswordPageState extends State<ForgotPasswordPage> {
         );
       }
     } catch (e) {
+      debugPrint("Forgot password error: $e");
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
          SnackBar(
-          content: Text("Connection error: $e"),
+          content: Text("Unable to connect to the server. Please try again."),
           backgroundColor: Colors.redAccent,
         ),
       );

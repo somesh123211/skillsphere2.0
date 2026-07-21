@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import 'dashboard_page.dart';
+import 'admin_session.dart';
 
 // --- AURUM THEME COLORS ---
 class AurumColors {
@@ -34,7 +35,7 @@ class _AdminOtpPageState extends State<AdminOtpPage> {
   final otpCtrl = TextEditingController();
   bool loading = false;
 
-  final String baseUrl = "https://skillsphere1-0-0.onrender.com";
+  final String baseUrl = "http://localhost:5000";
 
   Future<void> verifyOtp() async {
     if (otpCtrl.text.length != 6) {
@@ -67,8 +68,7 @@ class _AdminOtpPageState extends State<AdminOtpPage> {
           context,
           MaterialPageRoute(
             builder: (_) => DashboardPage(
-              token: data["token"],
-              adminName: data["admin"]["name"],
+              session: AdminSession.fromLogin(data["token"], data["admin"]),
             ),
           ),
         );
@@ -83,10 +83,11 @@ class _AdminOtpPageState extends State<AdminOtpPage> {
         ),
       );
     } catch (e) {
+      debugPrint("OTP verify error: $e");
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("Unexpected error: $e"),
+          content: Text("Unable to connect to the server. Please try again."),
           backgroundColor: Colors.redAccent,
         ),
       );

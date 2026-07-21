@@ -30,7 +30,7 @@ class _LoginSignupPageState extends State<LoginSignupPage> {
   Timer? _otpTimer;
 
   // CHANGE THIS TO YOUR IP IF ON REAL DEVICE
-  final String baseUrl = "https://skillsphere1-0-0.onrender.com";
+  final String baseUrl = "http://localhost:5000";
 
   // ================= CONTROLLERS =================
   final nameController = TextEditingController();
@@ -40,10 +40,31 @@ class _LoginSignupPageState extends State<LoginSignupPage> {
   final confirmPasswordController = TextEditingController();
   final otpController = TextEditingController();
 
-  // ================= FIXED VALUES =================
-  String selectedYear = '2ND YEAR';
-  final String lockedBranch = 'AI';
-  final List<String> yearOptions = const ['2ND YEAR', '3RD YEAR'];
+  // ================= FIXED / OPTION VALUES =================
+  String selectedYear = '1ST YEAR';
+  String selectedBranch = 'AI';
+
+  final List<String> yearOptions = const [
+    '1ST YEAR',
+    '2ND YEAR',
+    '3RD YEAR',
+    '4TH YEAR',
+  ];
+
+  final Map<String, String> departmentOptions = const {
+    'AI': 'Artificial Intelligence (AI)',
+    'DS': 'Data Science (DS)',
+    'CSE': 'Computer Science & Eng (CSE)',
+    'IT': 'Information Technology (IT)',
+    'ETC': 'Electronics & Telecomm (ETC)',
+    'MECH': 'Mechanical Engineering (MECH)',
+    'CIVIL': 'Civil Engineering (CIVIL)',
+    'EE': 'Electrical Engineering (EE)',
+    'CS-CY': 'Cyber Security (CS-CY)',
+    'CSBS': 'CS & Business Systems (CSBS)',
+    'IIOT': 'Industrial IOT (IIOT)',
+    'RAI': 'Robotics & AI (RAI)',
+  };
 
   @override
   void dispose() {
@@ -67,11 +88,9 @@ class _LoginSignupPageState extends State<LoginSignupPage> {
       _otpTimer?.cancel();
       _formKey.currentState?.reset();
 
-      // Optional: Clear fields when switching
       if (isLogin) {
         nameController.clear();
         uidController.clear();
-        // Don't clear email/pass as user might want to login with them
       }
     });
   }
@@ -151,16 +170,16 @@ class _LoginSignupPageState extends State<LoginSignupPage> {
   Future<void> signup() async {
     if (!_formKey.currentState!.validate()) return;
     if (!otpSent) return showMsg("Please send OTP first", isError: true);
-    if (otpController.text.trim().isEmpty)
+    if (otpController.text.trim().isEmpty) {
       return showMsg("Enter OTP", isError: true);
+    }
 
     setState(() => isLoading = true);
 
-    // DEBUG PRINT: Check your console to see exactly what is being sent!
     final bodyData = {
       "name": nameController.text.trim(),
       "uid": uidController.text.trim(),
-      "branch": lockedBranch,
+      "branch": selectedBranch,
       "year": selectedYear.substring(0, 1),
       "email": emailController.text.trim(),
       "password": passwordController.text.trim(),
@@ -181,7 +200,6 @@ class _LoginSignupPageState extends State<LoginSignupPage> {
         showMsg("Signup successful. Please Login.", isError: false);
         _toggleMode();
       } else {
-        // This will show "User already exists" if returned by backend
         showMsg(data["message"] ?? "Signup failed", isError: true);
         print("SIGNUP FAILED RESPONSE: ${data['message']}");
       }
@@ -224,10 +242,10 @@ class _LoginSignupPageState extends State<LoginSignupPage> {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Color(0xFF1a1a3e),
-              Color(0xFF0f1e3e),
-              Color(0xFF1a0f3e),
-              Color(0xFF2d1b4e)
+              Color(0xFF0F172A),
+              Color(0xFF1E1B4B),
+              Color(0xFF0F172A),
+              Color(0xFF1E293B)
             ],
           ),
         ),
@@ -251,35 +269,57 @@ class _LoginSignupPageState extends State<LoginSignupPage> {
                 child: Column(
                   children: [
                     ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 500),
+                      constraints: const BoxConstraints(maxWidth: 520),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(28),
                         child: BackdropFilter(
-                          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
                           child: Container(
                             padding: const EdgeInsets.all(28),
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.08),
+                              color: Colors.white.withOpacity(0.06),
                               borderRadius: BorderRadius.circular(28),
                               border: Border.all(
-                                  color: Colors.white.withOpacity(0.12),
+                                  color: Colors.white.withOpacity(0.15),
                                   width: 1.2),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.4),
+                                  blurRadius: 24,
+                                  offset: const Offset(0, 8),
+                                ),
+                              ],
                             ),
                             child: Form(
                               key: _formKey,
                               child: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Text(
-                                    isLogin ? "WELCOME BACK" : "CREATE ACCOUNT",
-                                    style: const TextStyle(
-                                      color: Color(0xFF00d4ff),
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 1.5,
+                                  ShaderMask(
+                                    shaderCallback: (bounds) => const LinearGradient(
+                                      colors: [Color(0xFF38BDF8), Color(0xFF818CF8)],
+                                    ).createShader(bounds),
+                                    child: Text(
+                                      isLogin ? "WELCOME BACK" : "CREATE ACCOUNT",
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 1.5,
+                                      ),
                                     ),
                                   ),
-                                  const SizedBox(height: 30),
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    isLogin
+                                        ? "Sign in to access your Skill Sphere dashboard"
+                                        : "Register your student profile",
+                                    style: TextStyle(
+                                      color: Colors.white.withOpacity(0.6),
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 24),
                                   if (!isLogin) ...[
                                     _GlassTextFormField(
                                       controller: nameController,
@@ -292,7 +332,7 @@ class _LoginSignupPageState extends State<LoginSignupPage> {
                                     const SizedBox(height: 12),
                                     _GlassTextFormField(
                                       controller: uidController,
-                                      hintText: "UID Number",
+                                      hintText: "UID Number (Must be Unique)",
                                       icon: Icons.badge_outlined,
                                       keyboardType: TextInputType.number,
                                       inputFormatters: [
@@ -304,7 +344,17 @@ class _LoginSignupPageState extends State<LoginSignupPage> {
                                           : null,
                                     ),
                                     const SizedBox(height: 12),
-                                    _LockedField(text: "Branch: $lockedBranch"),
+                                    _GlassDropdown<String>(
+                                      value: selectedBranch,
+                                      items: departmentOptions,
+                                      icon: Icons.domain_rounded,
+                                      label: "Department",
+                                      onChanged: (val) {
+                                        if (val != null) {
+                                          setState(() => selectedBranch = val);
+                                        }
+                                      },
+                                    ),
                                     const SizedBox(height: 12),
                                     _SegmentedButton<String>(
                                       values: yearOptions,
@@ -336,11 +386,43 @@ class _LoginSignupPageState extends State<LoginSignupPage> {
                                     showObscure: _showPassword,
                                     onToggleObscure: () => setState(
                                         () => _showPassword = !_showPassword),
-                                    validator: (v) => (v ?? '').length < 6
-                                        ? "Min 6 chars"
-                                        : null,
+                                    // Only enforce the strength rule when
+                                    // setting a NEW password (signup) - an
+                                    // existing student logging in must
+                                    // never be blocked by a policy that
+                                    // postdates their account.
+                                    validator: isLogin
+                                        ? null
+                                        : (v) {
+                                            final val = v ?? '';
+                                            if (val.length < 8) {
+                                              return "Min 8 characters";
+                                            }
+                                            if (!RegExp(r'[A-Z]').hasMatch(val)) {
+                                              return "Add an uppercase letter";
+                                            }
+                                            if (!RegExp(r'[a-z]').hasMatch(val)) {
+                                              return "Add a lowercase letter";
+                                            }
+                                            if (!RegExp(r'[0-9]').hasMatch(val)) {
+                                              return "Add a digit";
+                                            }
+                                            if (!RegExp(r'[^A-Za-z0-9]').hasMatch(val)) {
+                                              return "Add a special character";
+                                            }
+                                            return null;
+                                          },
                                   ),
                                   if (!isLogin) ...[
+                                    const SizedBox(height: 4),
+                                    const Align(
+                                      alignment: Alignment.centerLeft,
+                                      child: Text(
+                                        "8+ characters, with uppercase, lowercase, a digit and a special character.",
+                                        style: TextStyle(
+                                            color: Colors.white70, fontSize: 11),
+                                      ),
+                                    ),
                                     const SizedBox(height: 12),
                                     _GlassTextFormField(
                                       controller: confirmPasswordController,
@@ -377,7 +459,7 @@ class _LoginSignupPageState extends State<LoginSignupPage> {
                                         _OtpButton(
                                           text: _otpCooldown > 0
                                               ? "${_otpCooldown}s"
-                                              : "Send",
+                                              : "Send OTP",
                                           onTap: (_otpCooldown > 0 || isLoading)
                                               ? null
                                               : sendOtp,
@@ -386,10 +468,10 @@ class _LoginSignupPageState extends State<LoginSignupPage> {
                                       ],
                                     ),
                                   ],
-                                  const SizedBox(height: 30),
+                                  const SizedBox(height: 28),
                                   if (isLoading)
                                     const CircularProgressIndicator(
-                                        color: Color(0xFF00d4ff))
+                                        color: Color(0xFF38BDF8))
                                   else
                                     _ActionButton(
                                       text: isLogin ? "LOGIN" : "REGISTER NOW",
@@ -419,10 +501,10 @@ class _LoginSignupPageState extends State<LoginSignupPage> {
                                       ),
                                       GestureDetector(
                                         onTap: _toggleMode,
-                                        child: Text(
-                                          isLogin ? "Signup" : "Login",
-                                          style: const TextStyle(
-                                            color: Color(0xFFff9f43),
+                                        child: const Text(
+                                          "Switch Here",
+                                          style: TextStyle(
+                                            color: Color(0xFF38BDF8),
                                             fontWeight: FontWeight.bold,
                                           ),
                                         ),
@@ -453,6 +535,70 @@ class _LoginSignupPageState extends State<LoginSignupPage> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ================= CUSTOM WIDGETS =================
+
+class _GlassDropdown<T> extends StatelessWidget {
+  final T value;
+  final Map<T, String> items;
+  final ValueChanged<T?> onChanged;
+  final IconData icon;
+  final String label;
+
+  const _GlassDropdown({
+    required this.value,
+    required this.items,
+    required this.onChanged,
+    required this.icon,
+    required this.label,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Colors.white.withOpacity(0.08),
+            Colors.white.withOpacity(0.04)
+          ],
+        ),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+            color: const Color(0xFF38BDF8).withOpacity(0.3), width: 1),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<T>(
+          value: value,
+          isExpanded: true,
+          dropdownColor: const Color(0xFF1E293B),
+          icon: const Icon(Icons.arrow_drop_down, color: Color(0xFF38BDF8)),
+          style: const TextStyle(color: Colors.white, fontSize: 14),
+          items: items.entries.map((entry) {
+            return DropdownMenuItem<T>(
+              value: entry.key,
+              child: Row(
+                children: [
+                  Icon(icon, color: Colors.white70, size: 18),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      entry.value,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+          onChanged: onChanged,
         ),
       ),
     );

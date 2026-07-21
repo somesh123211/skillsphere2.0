@@ -18,7 +18,7 @@ class FacultyQuizPage extends StatefulWidget {
 }
 
 class _FacultyQuizPageState extends State<FacultyQuizPage> {
-  final String baseUrl = "https://skillsphere1-0-0.onrender.com";
+  final String baseUrl = "http://localhost:5000";
 
   bool loading = true;
   bool submitting = false;
@@ -26,13 +26,13 @@ class _FacultyQuizPageState extends State<FacultyQuizPage> {
   bool quizFinished = false;
   bool optionsDisabled = false;
 
+  String quizName = "";
   List<Map<String, dynamic>> questions = [];
 
-  // 🔥 STORES a / b / c / d
+  // Question ID -> Selected Option key (A / B / C / D)
   final Map<int, String?> answers = {};
 
-  static const int quizDurationSeconds = 600;
-  int remainingSeconds = quizDurationSeconds;
+  int remainingSeconds = 0;
   Timer? countdownTimer;
 
   // ================= INIT =================
@@ -40,7 +40,6 @@ class _FacultyQuizPageState extends State<FacultyQuizPage> {
   void initState() {
     super.initState();
     fetchFacultyQuiz();
-    startCountdown();
   }
 
   @override
@@ -51,6 +50,7 @@ class _FacultyQuizPageState extends State<FacultyQuizPage> {
 
   // ================= TIMER =================
   void startCountdown() {
+    countdownTimer?.cancel();
     countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (remainingSeconds > 0) {
         setState(() => remainingSeconds--);
@@ -77,7 +77,9 @@ class _FacultyQuizPageState extends State<FacultyQuizPage> {
     try {
       final response = await http.get(
         Uri.parse("$baseUrl/faculty_quiz?quiz_id=${widget.quizId}"),
-        headers: {"Authorization": "Bearer ${widget.token}"},
+        headers: {
+          "Authorization": "Bearer ${widget.token}",
+        },
       );
 
       final data = jsonDecode(response.body);
@@ -85,44 +87,102 @@ class _FacultyQuizPageState extends State<FacultyQuizPage> {
       if (data["attempted"] == true) {
         quizFinished = true;
         optionsDisabled = true;
-        loading = false;
-        countdownTimer?.cancel();
-
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (_) => AlertDialog(
-              title: const Text("Quiz Locked"),
-              content: const Text(
-                "You have already attempted this faculty quiz.\n"
-                "Check profile section for marks.",
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    Navigator.pop(context);
-                  },
-                  child: const Text("OK"),
-                ),
-              ],
-            ),
-          );
-        });
+        setState(() => loading = false);
+        _showLockedDialog();
         return;
       }
 
       if (response.statusCode == 200 && data["success"] == true) {
         setState(() {
+          quizName = data["quiz_name"]?.toString() ?? "";
+          remainingSeconds = (data["remaining_seconds"] as num?)?.toInt() ?? 0;
           questions = List<Map<String, dynamic>>.from(data["questions"] ?? []);
+
+          for (var q in questions) {
+            final qid = q["question_id"];
+            final selected = q["selected_answer"];
+            if (selected != null && selected.toString().isNotEmpty) {
+              answers[qid] = selected.toString();
+            }
+          }
           loading = false;
         });
+        startCountdown();
       } else {
-        loading = false;
+        setState(() => loading = false);
+        _showErrorDialog(data["message"] ?? data["error"] ?? "Failed to load quiz");
       }
-    } catch (_) {
-      loading = false;
+    } catch (e) {
+      debugPrint("Faculty quiz fetch error: $e");
+      setState(() => loading = false);
+      _showErrorDialog("Unable to connect to the server. Please check your internet connection and try again.");
+    }
+  }
+
+  void _showLockedDialog() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => AlertDialog(
+          title: const Text("Quiz Locked"),
+          content: const Text(
+            "You have already attempted this faculty quiz.\n"
+            "Check profile section for marks.",
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.pop(context);
+              },
+              child: const Text("OK"),
+            ),
+          ],
+        ),
+      );
+    });
+  }
+
+  void _showErrorDialog(String msg) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => AlertDialog(
+          title: const Text("Faculty Quiz"),
+          content: Text(msg),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.pop(context);
+              },
+              child: const Text("Back"),
+            ),
+          ],
+        ),
+      );
+    });
+  }
+
+  // ================= AUTOSAVE ANSWER =================
+  Future<void> autosaveAnswer(int questionId, String selectedOption) async {
+    try {
+      await http.post(
+        Uri.parse("$baseUrl/api/faculty_quiz/autosave"),
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer ${widget.token}",
+        },
+        body: jsonEncode({
+          "quiz_id": widget.quizId,
+          "question_id": questionId,
+          "selected_answer": selectedOption,
+        }),
+      );
+    } catch (e) {
+      // Best-effort - the final submit is still authoritative.
     }
   }
 
@@ -139,7 +199,7 @@ class _FacultyQuizPageState extends State<FacultyQuizPage> {
         "answers": questions.map((q) {
           return {
             "question_id": q["question_id"],
-            "selected_answer": answers[q["question_id"]], // ✅ a/b/c/d
+            "selected_answer": answers[q["question_id"]] ?? "",
           };
         }).toList(),
       };
@@ -159,7 +219,6 @@ class _FacultyQuizPageState extends State<FacultyQuizPage> {
       optionsDisabled = true;
       setState(() => submitting = false);
 
-      // 🔥 AUTO SUBMIT → EXIT ONLY ON SUCCESS
       if (auto && response.statusCode == 200) {
         Navigator.pop(context);
         return;
@@ -183,9 +242,13 @@ class _FacultyQuizPageState extends State<FacultyQuizPage> {
           Navigator.of(context, rootNavigator: true).pop();
           Navigator.of(context).pop();
         });
+      } else {
+        final data = jsonDecode(response.body);
+        showMsg(data["error"] ?? "Failed to submit quiz");
       }
     } catch (_) {
       setState(() => submitting = false);
+      showMsg("Network error submitting quiz");
     }
   }
 
@@ -211,7 +274,7 @@ class _FacultyQuizPageState extends State<FacultyQuizPage> {
       onWillPop: onWillPop,
       child: Scaffold(
         appBar: AppBar(
-          title: Text("Faculty Quiz ${widget.quizId}"),
+          title: Text(quizName.isNotEmpty ? quizName : "Faculty Quiz"),
           automaticallyImplyLeading: false,
         ),
         body: loading
@@ -252,16 +315,8 @@ class _FacultyQuizPageState extends State<FacultyQuizPage> {
 
                             final q = questions[index];
                             final qid = q["question_id"];
-
-                            // 🔥 OPTION KEY → TEXT MAP
-                            final options = {
-                              "a": q["option_a"],
-                              "b": q["option_b"],
-                              "c": q["option_c"],
-                              "d": q["option_d"],
-                            }..removeWhere(
-                                (k, v) => v == null || v.toString().isEmpty,
-                              );
+                            final options =
+                                List<Map<String, dynamic>>.from(q["options"]);
 
                             return Card(
                               margin: const EdgeInsets.only(bottom: 16),
@@ -276,13 +331,13 @@ class _FacultyQuizPageState extends State<FacultyQuizPage> {
                                           fontWeight: FontWeight.bold),
                                     ),
                                     const SizedBox(height: 10),
-                                    ...options.entries.map((entry) {
-                                      final key = entry.key; // a/b/c/d
-                                      final text = entry.value;
+                                    ...options.map((opt) {
+                                      final key = opt["key"].toString();
+                                      final text = opt["text"].toString();
 
                                       return RadioListTile<String>(
                                         title: Text(text),
-                                        value: key, // ✅ SEND KEY
+                                        value: key,
                                         groupValue: answers[qid],
                                         onChanged: optionsDisabled
                                             ? null
@@ -290,6 +345,9 @@ class _FacultyQuizPageState extends State<FacultyQuizPage> {
                                                 setState(() {
                                                   answers[qid] = val;
                                                 });
+                                                if (val != null) {
+                                                  autosaveAnswer(qid, val);
+                                                }
                                               },
                                       );
                                     }),

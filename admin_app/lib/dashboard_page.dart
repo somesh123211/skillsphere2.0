@@ -7,6 +7,9 @@ import 'add_daily_quiz_page.dart';
 import 'faculty_quiz_page.dart';
 import 'students_marks_menu_page.dart';
 import 'login_page.dart';
+import 'admin_session.dart';
+import 'departments_page.dart';
+import 'staff_management_page.dart';
 
 // --- AURUM THEME COLORS ---
 class AurumColors {
@@ -33,13 +36,11 @@ class AurumColors {
 }
 
 class DashboardPage extends StatefulWidget {
-  final String token;
-  final String adminName;
+  final AdminSession session;
 
   const DashboardPage({
     Key? key,
-    required this.token,
-    required this.adminName,
+    required this.session,
   }) : super(key: key);
 
   @override
@@ -92,6 +93,21 @@ class _DashboardPageState extends State<DashboardPage> {
       'Dec'
     ];
     return "${months[_now.month - 1]} ${_now.day}, ${_now.year}";
+  }
+
+  String get _roleLabel {
+    switch (widget.session.role) {
+      case "super_admin":
+        return "Super Admin Access";
+      case "admin":
+        return "Administrator Access";
+      case "hod":
+        return "Head of Department";
+      case "faculty":
+        return "Faculty Access";
+      default:
+        return "Administrator Access";
+    }
   }
 
   // =========================
@@ -229,7 +245,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    "Hello, ${widget.adminName}",
+                                    "Hello, ${widget.session.name}",
                                     style: const TextStyle(
                                       color: Colors.black87,
                                       fontSize: 22,
@@ -237,14 +253,26 @@ class _DashboardPageState extends State<DashboardPage> {
                                     ),
                                   ),
                                   const SizedBox(height: 4),
-                                  const Text(
-                                    "Administrator Access",
-                                    style: TextStyle(
+                                  Text(
+                                    _roleLabel,
+                                    style: const TextStyle(
                                       color: Colors.black54,
                                       fontSize: 14,
                                       fontWeight: FontWeight.w500,
                                     ),
                                   ),
+                                  if ((widget.session.isHod || widget.session.isFaculty) &&
+                                      widget.session.deptName.isNotEmpty) ...[
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      widget.session.deptName,
+                                      style: const TextStyle(
+                                        color: Colors.black45,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
                                 ],
                               ),
                               Container(
@@ -281,8 +309,9 @@ class _DashboardPageState extends State<DashboardPage> {
                     // 1. Students Management
                     _buildWideActionTile(
                       title: "Manage Students",
-                      subtitle:
-                          "View list, approve registrations & manage profiles",
+                      subtitle: widget.session.isFaculty
+                          ? "View student list (read-only)"
+                          : "View list, approve registrations & manage profiles",
                       icon: Icons.people_alt_rounded,
                       colorStart: const Color(0xFF6dd5ed), // Subtle blue accent
                       colorEnd: const Color(0xFF2193b0),
@@ -290,23 +319,23 @@ class _DashboardPageState extends State<DashboardPage> {
                         context,
                         MaterialPageRoute(
                             builder: (_) =>
-                                StudentsListPage(token: widget.token)),
+                                StudentsListPage(session: widget.session)),
                       ),
                     ),
                     const SizedBox(height: 16),
 
                     Row(
                       children: [
-                        // 2. Daily Quiz (Left)
+                        // 2. Ai Quiz (Left)
                         Expanded(
                           child: _buildSquareActionTile(
-                            title: "Daily Quiz",
+                            title: "Ai Quiz",
                             icon: Icons.timer_outlined,
                             onTap: () => Navigator.push(
                               context,
                               MaterialPageRoute(
-                                  builder: (_) =>
-                                      AddDailyQuizPage(token: widget.token)),
+                                  builder: (_) => AddDailyQuizPage(
+                                      session: widget.session)),
                             ),
                           ),
                         ),
@@ -321,7 +350,7 @@ class _DashboardPageState extends State<DashboardPage> {
                               context,
                               MaterialPageRoute(
                                   builder: (_) =>
-                                      FacultyQuizPage(token: widget.token)),
+                                      FacultyQuizPage(session: widget.session)),
                             ),
                           ),
                         ),
@@ -341,10 +370,49 @@ class _DashboardPageState extends State<DashboardPage> {
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(
-                            builder: (_) =>
-                                StudentsMarksMenuPage(token: widget.token)),
+                            builder: (_) => StudentsMarksMenuPage(
+                                session: widget.session)),
                       ),
                     ),
+
+                    // 5. Departments (super_admin/admin only)
+                    if (widget.session.isSuperAdmin) ...[
+                      const SizedBox(height: 16),
+                      _buildWideActionTile(
+                        title: "Departments",
+                        subtitle:
+                            "Browse every department's staff, subjects & quizzes",
+                        icon: Icons.apartment_rounded,
+                        colorStart: const Color(0xFFa18cd1),
+                        colorEnd: const Color(0xFF6c5ce7),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) =>
+                                  DepartmentsPage(session: widget.session)),
+                        ),
+                      ),
+                    ],
+
+                    // 6. Staff Management (super_admin/admin/hod)
+                    if (widget.session.canManageStaff) ...[
+                      const SizedBox(height: 16),
+                      _buildWideActionTile(
+                        title: "Staff Management",
+                        subtitle: widget.session.isHod
+                            ? "Manage faculty in your department"
+                            : "Create, edit & manage HOD/faculty accounts",
+                        icon: Icons.badge_rounded,
+                        colorStart: const Color(0xFF43cea2),
+                        colorEnd: const Color(0xFF185a9d),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => StaffManagementPage(
+                                  session: widget.session)),
+                        ),
+                      ),
+                    ],
 
                     const SizedBox(height: 40),
 

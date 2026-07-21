@@ -32,7 +32,7 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
   final passCtrl = TextEditingController();
   final confirmCtrl = TextEditingController();
 
-  final baseUrl = "https://skillsphere1-0-0.onrender.com";
+  final baseUrl = "http://localhost:5000";
 
   bool loading = false;
 
@@ -102,8 +102,9 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
         showError(resetData["error"] ?? "Password reset failed");
       }
     } catch (e) {
+      debugPrint("Admin reset password error: $e");
       setState(() => loading = false);
-      showError("Connection error: $e");
+      showError("Unable to connect to the server. Please try again.");
     }
   }
 
@@ -181,6 +182,11 @@ class _ResetPasswordPageState extends State<ResetPasswordPage> {
               isObscured: _obscurePass,
               onToggleVisibility: () =>
                   setState(() => _obscurePass = !_obscurePass),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              "8+ characters, with uppercase, lowercase, a digit and a special character.",
+              style: TextStyle(color: AurumColors.textGrey, fontSize: 11),
             ),
             const SizedBox(height: 20),
 

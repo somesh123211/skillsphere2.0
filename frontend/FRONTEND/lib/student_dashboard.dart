@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'daily_quiz_page.dart';
 import 'faculty_quiz_page.dart';
 import 'pages/student_profile.dart';
+import 'pages/quiz_review_page.dart';
 
 class StudentDashboard extends StatefulWidget {
   final String token;
@@ -28,22 +29,24 @@ class _StudentDashboardState extends State<StudentDashboard>
   // ================= LOGIC (STRICTLY PRESERVED) =================
 
   // NOTE: If using Android Emulator, change to "http://10.0.2.2:5000"
-  final String baseUrl = "https://skillsphere1-0-0.onrender.com";
+  final String baseUrl = "http://localhost:5000";
 
   bool loadingProfile = true;
   bool loadingTodayQuiz = true;
-  bool loadingFacultyQuiz = true;
 
   String name = "";
   String branch = "";
   String? profileImageUrl;
 
   bool todayQuizAvailable = false;
-  bool todayQuizAttempted = false;
+  List<dynamic> todayQuizzes = [];
 
-  List<Map<String, dynamic>> facultyQuizzes = [];
+  bool loadingFacultyQuizzes = true;
+  List<dynamic> facultyQuizzes = [];
+
 
   Timer? uiTimer;
+  Timer? refreshTimer;
 
   // Animation Controller for the Moving Background
   late AnimationController _warpController;
@@ -59,7 +62,7 @@ class _StudentDashboardState extends State<StudentDashboard>
 
     fetchProfile();
     fetchTodayQuizStatus();
-    fetchFacultyQuizzes();
+    fetchFacultyQuizList();
 
     // 🔄 Refresh countdown every second to keep timers live
     uiTimer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -67,11 +70,23 @@ class _StudentDashboardState extends State<StudentDashboard>
         setState(() {});
       }
     });
+
+    // 🔄 Re-fetch quiz availability periodically - a quiz created or
+    // opened by an admin/faculty *after* this dashboard first loaded
+    // would otherwise never appear until the student manually reloads,
+    // since the one-time initState fetch never gets refreshed on its own.
+    refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) {
+        fetchTodayQuizStatus();
+        fetchFacultyQuizList();
+      }
+    });
   }
 
   @override
   void dispose() {
     uiTimer?.cancel();
+    refreshTimer?.cancel();
     _warpController.dispose();
     super.dispose();
   }
@@ -122,7 +137,7 @@ class _StudentDashboardState extends State<StudentDashboard>
         final data = jsonDecode(res.body);
         setState(() {
           todayQuizAvailable = data['available'] == true;
-          todayQuizAttempted = data['attempted'] == true;
+          todayQuizzes = data['quizzes'] ?? [];
           loadingTodayQuiz = false;
         });
       } else {
@@ -133,50 +148,37 @@ class _StudentDashboardState extends State<StudentDashboard>
     }
   }
 
-  // --- API CALL 3: FACULTY QUIZ LIST ---
-  Future<void> fetchFacultyQuizzes() async {
+  // --- API CALL 3: FACULTY QUIZZES AVAILABLE TODAY ---
+  Future<void> fetchFacultyQuizList() async {
     try {
       final res = await http.get(
         Uri.parse('$baseUrl/faculty_quiz/list'),
         headers: {'Authorization': 'Bearer ${widget.token}'},
       );
 
-      if (res.statusCode != 200) {
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
         setState(() {
-          facultyQuizzes = [];
-          loadingFacultyQuiz = false;
+          facultyQuizzes = data['quizzes'] ?? [];
+          loadingFacultyQuizzes = false;
         });
-        return;
+      } else {
+        setState(() => loadingFacultyQuizzes = false);
       }
-
-      final data = jsonDecode(res.body);
-      final raw = data['quizzes'] ?? [];
-
-      setState(() {
-        facultyQuizzes = raw
-            .map<Map<String, dynamic>>((e) => Map<String, dynamic>.from(e))
-            .where((q) => !isEnded(q))
-            .toList();
-
-        loadingFacultyQuiz = false;
-      });
     } catch (_) {
-      setState(() {
-        facultyQuizzes = [];
-        loadingFacultyQuiz = false;
-      });
+      setState(() => loadingFacultyQuizzes = false);
     }
   }
 
   Future<void> handleRefresh() async {
     setState(() {
       loadingTodayQuiz = true;
-      loadingFacultyQuiz = true;
+      loadingFacultyQuizzes = true;
     });
     await Future.wait([
       fetchProfile(),
       fetchTodayQuizStatus(),
-      fetchFacultyQuizzes(),
+      fetchFacultyQuizList(),
     ]);
   }
 
@@ -277,14 +279,15 @@ class _StudentDashboardState extends State<StudentDashboard>
                   _buildProfileHeader(),
                   const SizedBox(height: 30),
                   _buildSectionTitle(
-                      "DAILY QUEST", Icons.bolt, const Color(0xFFFFD700)),
+                      "AI QUIZ CHALLENGE", Icons.bolt, const Color(0xFFFFD700)),
                   const SizedBox(height: 12),
                   _buildDailyQuizCard(),
+
                   const SizedBox(height: 30),
-                  _buildSectionTitle("ACTIVE MISSIONS", Icons.sports_esports,
+                  _buildSectionTitle("FACULTY QUIZ", Icons.assignment_outlined,
                       const Color(0xFF00D4FF)),
                   const SizedBox(height: 12),
-                  _buildFacultyQuizList(),
+                  _buildFacultyQuizCard(),
 
                   const SizedBox(height: 40),
                   // ================= FOOTER =================
@@ -433,91 +436,24 @@ class _StudentDashboardState extends State<StudentDashboard>
   }
 
   Widget _buildDailyQuizCard() {
-    if (loadingTodayQuiz)
+    if (loadingTodayQuiz) {
       return const Center(
           child: CircularProgressIndicator(color: Color(0xFFFFD700)));
+    }
+       final activeQuizzes = todayQuizzes.where((quiz) {
+      final String? startTime = quiz['quiz_start_time'];
+      final String? endTime = quiz['quiz_end_time'];
+      final todayStr = DateTime.now().toIso8601String().split("T")[0];
+      final Map q = {
+        'quiz_date': todayStr,
+        'quiz_start_time': startTime ?? "00:00:00",
+        'quiz_end_time': endTime ?? "23:59:59",
+      };
+      final bool ended = isEnded(q);
+      return !ended;
+    }).toList();
 
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        gradient: const LinearGradient(
-            colors: [Color(0xFFF2994A), Color(0xFFF2C94C)]),
-        boxShadow: [
-          BoxShadow(
-              color: const Color(0xFFF2994A).withOpacity(0.3),
-              blurRadius: 12,
-              offset: const Offset(0, 6))
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(20),
-          onTap: (todayQuizAvailable && !todayQuizAttempted)
-              ? () async {
-                  await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => DailyQuizPage(token: widget.token)));
-                  fetchTodayQuizStatus();
-                }
-              : null,
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.2),
-                      shape: BoxShape.circle),
-                  child: Icon(
-                      todayQuizAttempted
-                          ? Icons.check_circle
-                          : Icons.play_arrow_rounded,
-                      color: Colors.white,
-                      size: 30),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text("Daily Challenge",
-                          style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 4),
-                      Text(
-                        !todayQuizAvailable
-                            ? "No quest available today"
-                            : todayQuizAttempted
-                                ? "Quest Completed"
-                                : "Ready to Start",
-                        style: TextStyle(
-                            color: Colors.white.withOpacity(0.9), fontSize: 14),
-                      ),
-                    ],
-                  ),
-                ),
-                if (todayQuizAvailable && !todayQuizAttempted)
-                  const Icon(Icons.arrow_forward_ios,
-                      color: Colors.white70, size: 16)
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFacultyQuizList() {
-    if (loadingFacultyQuiz)
-      return const Center(
-          child: CircularProgressIndicator(color: Color(0xFF00D4FF)));
-    if (facultyQuizzes.isEmpty) {
+    if (!todayQuizAvailable || activeQuizzes.isEmpty) {
       return Container(
         padding: const EdgeInsets.all(30),
         decoration: BoxDecoration(
@@ -529,7 +465,7 @@ class _StudentDashboardState extends State<StudentDashboard>
           children: [
             Icon(Icons.inbox, size: 40, color: Colors.white.withOpacity(0.3)),
             const SizedBox(height: 10),
-            Text("No active missions",
+            Text("No Ai Quiz scheduled for today",
                 style: TextStyle(color: Colors.white.withOpacity(0.5))),
           ],
         ),
@@ -537,135 +473,348 @@ class _StudentDashboardState extends State<StudentDashboard>
     }
 
     return Column(
-      children: facultyQuizzes.map((q) => _buildQuizCard(q)).toList(),
+      children: activeQuizzes.map((quiz) {
+        final int quizId = quiz['id'];
+        final String? title = quiz['title'];
+        final String? subject = quiz['subject'];
+        final String? topic = quiz['topic'];
+        final String? startTime = quiz['quiz_start_time'];
+        final String? endTime = quiz['quiz_end_time'];
+        final String? status = quiz['status'];
+        final bool attempted = quiz['attempted'] == true;
+
+        final todayStr = DateTime.now().toIso8601String().split("T")[0];
+        final Map q = {
+          'quiz_date': todayStr,
+          'quiz_start_time': startTime ?? "00:00:00",
+          'quiz_end_time': endTime ?? "23:59:59",
+        };
+
+        bool ready = status == "READY";
+        bool live = isLive(q);
+        bool upcoming = isUpcoming(q);
+
+        Color statusColor = live
+            ? const Color(0xFF00FF88)
+            : (upcoming ? const Color(0xFF00D4FF) : Colors.grey);
+        String statusText = live 
+            ? "LIVE" 
+            : (upcoming ? "UPCOMING" : "ENDED");
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          child: _GlassContainer(
+            padding: const EdgeInsets.all(0),
+            child: Material(
+               color: Colors.transparent,
+               child: InkWell(
+                 borderRadius: BorderRadius.circular(20),
+                 onTap: (live && !attempted)
+                     ? () async {
+                          await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) => DailyQuizPage(
+                                        token: widget.token,
+                                        quizId: quizId,
+                                      )));
+                          fetchTodayQuizStatus();
+                        }
+                     : null,
+                 child: Padding(
+                   padding: const EdgeInsets.all(20),
+                   child: Column(
+                     crossAxisAlignment: CrossAxisAlignment.start,
+                     children: [
+                       Row(
+                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                         children: [
+                           Container(
+                             padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
+                             decoration: BoxDecoration(
+                               color: statusColor.withOpacity(0.2),
+                               borderRadius: BorderRadius.circular(8),
+                               border: Border.all(color: statusColor.withOpacity(0.5)),
+                             ),
+                             child: Row(
+                               children: [
+                                 if (live) _BlinkingDot(color: statusColor),
+                                 if (live) const SizedBox(width: 6),
+                                 Text(statusText,
+                                     style: TextStyle(
+                                         color: statusColor,
+                                         fontSize: 10,
+                                         fontWeight: FontWeight.bold)),
+                               ],
+                             ),
+                           ),
+                           if (attempted)
+                             const Icon(Icons.check_circle,
+                                 color: Color(0xFF00FF88), size: 18),
+                         ],
+                       ),
+                       const SizedBox(height: 12),
+                       Text(
+                         subject?.toUpperCase() ?? "AI QUIZ",
+                         style: const TextStyle(
+                             color: Color(0xFFFFD700),
+                             fontSize: 12,
+                             fontWeight: FontWeight.bold,
+                             letterSpacing: 1.0),
+                       ),
+                       const SizedBox(height: 4),
+                       Text(
+                         topic ?? "Topic Details",
+                         style: const TextStyle(
+                             color: Colors.white,
+                             fontSize: 18,
+                             fontWeight: FontWeight.bold),
+                       ),
+                       if (title != null && title.isNotEmpty) ...[
+                         const SizedBox(height: 4),
+                         Text(
+                           title,
+                           style: TextStyle(
+                               color: Colors.white.withOpacity(0.7),
+                               fontSize: 14),
+                         ),
+                       ],
+                       const SizedBox(height: 12),
+                       if (upcoming)
+                         Row(
+                           children: [
+                             const Icon(Icons.timer,
+                                 size: 14, color: Color(0xFF00D4FF)),
+                             const SizedBox(width: 6),
+                             Text("Starts in: ${startCountdown(q)}",
+                                 style: const TextStyle(
+                                     color: Color(0xFF00D4FF),
+                                     fontSize: 12,
+                                     fontFamily: 'monospace')),
+                           ],
+                         ),
+                       if (live)
+                         Row(
+                           children: [
+                             const Icon(Icons.hourglass_bottom,
+                                 size: 14, color: Color(0xFFFF5555)),
+                             const SizedBox(width: 6),
+                             Text("Ends in: ${endCountdown(q)}",
+                                 style: const TextStyle(
+                                     color: Color(0xFFFF5555),
+                                     fontSize: 12,
+                                     fontFamily: 'monospace')),
+                           ],
+                         ),
+                       if (live && !attempted) ...[
+                         const SizedBox(height: 16),
+                         Container(
+                           width: double.infinity,
+                           padding: const EdgeInsets.symmetric(vertical: 12),
+                           decoration: BoxDecoration(
+                             gradient: const LinearGradient(
+                                 colors: [Color(0xFFFF9F43), Color(0xFFFFC048)]),
+                             borderRadius: BorderRadius.circular(12),
+                             boxShadow: [
+                               BoxShadow(
+                                   color: const Color(0xFFFF9F43).withOpacity(0.4),
+                                   blurRadius: 8,
+                                   offset: const Offset(0, 4))
+                             ],
+                           ),
+                           alignment: Alignment.center,
+                           child: const Text("START AI QUIZ",
+                               style: TextStyle(
+                                   color: Colors.black,
+                                   fontWeight: FontWeight.bold,
+                                   letterSpacing: 1)),
+                         ),
+                       ]
+                     ],
+                    ),
+                  ),
+                ),
+             ),
+           ),
+         );
+       }).toList(),
     );
   }
 
-  Widget _buildQuizCard(Map q) {
-    bool attempted = q['attempted'] == true;
-    bool live = isLive(q);
-    bool upcoming = isUpcoming(q);
+  Widget _buildFacultyQuizCard() {
+    if (loadingFacultyQuizzes) {
+      return const Center(
+          child: CircularProgressIndicator(color: Color(0xFF00D4FF)));
+    }
 
-    Color statusColor = live
-        ? const Color(0xFF00FF88)
-        : (upcoming ? const Color(0xFF00D4FF) : Colors.grey);
-    String statusText = live ? "LIVE" : (upcoming ? "UPCOMING" : "ENDED");
+    final activeFacultyQuizzes = facultyQuizzes.where((quiz) {
+      final Map q = {
+        'quiz_date': quiz['quiz_date'],
+        'quiz_start_time': quiz['quiz_start_time'] ?? "00:00:00",
+        'quiz_end_time': quiz['quiz_end_time'] ?? "23:59:59",
+      };
+      return !isEnded(q);
+    }).toList();
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      child: _GlassContainer(
-        padding: const EdgeInsets.all(0),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            borderRadius: BorderRadius.circular(20),
-            onTap: (live && !attempted)
-                ? () async {
-                    await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => FacultyQuizPage(
-                                token: widget.token, quizId: q['quiz_id'])));
-                    fetchFacultyQuizzes();
-                  }
-                : null,
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    if (activeFacultyQuizzes.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(30),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white.withOpacity(0.1)),
+        ),
+        child: Column(
+          children: [
+            Icon(Icons.inbox, size: 40, color: Colors.white.withOpacity(0.3)),
+            const SizedBox(height: 10),
+            Text("No faculty quiz scheduled for today",
+                style: TextStyle(color: Colors.white.withOpacity(0.5))),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      children: activeFacultyQuizzes.map((quiz) {
+        final int quizId = quiz['quiz_id'];
+        final String name = quiz['quiz_name']?.toString() ?? "Faculty Quiz";
+        final bool attempted = quiz['attempted'] == true;
+        final int? score = quiz['score'];
+        final int? total = quiz['total'];
+        final Map q = {
+          'quiz_date': quiz['quiz_date'],
+          'quiz_start_time': quiz['quiz_start_time'] ?? "00:00:00",
+          'quiz_end_time': quiz['quiz_end_time'] ?? "23:59:59",
+        };
+
+        final bool live = isLive(q);
+        final bool upcoming = isUpcoming(q);
+
+        final Color statusColor = attempted
+            ? const Color(0xFF00FF88)
+            : (live
+                ? const Color(0xFF00FF88)
+                : (upcoming ? const Color(0xFF00D4FF) : Colors.grey));
+        final String statusText = attempted
+            ? "SUBMITTED"
+            : (live ? "LIVE" : (upcoming ? "UPCOMING" : "ENDED"));
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          child: _GlassContainer(
+            padding: const EdgeInsets.all(0),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(20),
+                onTap: attempted
+                    ? null
+                    : (live
+                        ? () async {
+                            await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                    builder: (_) => FacultyQuizPage(
+                                          token: widget.token,
+                                          quizId: quizId,
+                                        )));
+                            fetchFacultyQuizList();
+                          }
+                        : null),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: statusColor.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(8),
-                          border:
-                              Border.all(color: statusColor.withOpacity(0.5)),
-                        ),
-                        child: Row(
-                          children: [
-                            if (live) _BlinkingDot(color: statusColor),
-                            if (live) const SizedBox(width: 6),
-                            Text(statusText,
-                                style: TextStyle(
-                                    color: statusColor,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold)),
-                          ],
-                        ),
-                      ),
-                      if (attempted)
-                        const Icon(Icons.check_circle,
-                            color: Color(0xFF00FF88), size: 18),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Text("Mission ID: ${q['quiz_id']}",
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 8),
-                  if (upcoming)
-                    Row(
-                      children: [
-                        const Icon(Icons.timer,
-                            size: 14, color: Color(0xFF00D4FF)),
-                        const SizedBox(width: 6),
-                        Text("Starts in: ${startCountdown(q)}",
-                            style: const TextStyle(
-                                color: Color(0xFF00D4FF),
-                                fontSize: 12,
-                                fontFamily: 'monospace')),
-                      ],
-                    ),
-                  if (live)
-                    Row(
-                      children: [
-                        const Icon(Icons.hourglass_bottom,
-                            size: 14, color: Color(0xFFFF5555)),
-                        const SizedBox(width: 6),
-                        Text("Ends in: ${endCountdown(q)}",
-                            style: const TextStyle(
-                                color: Color(0xFFFF5555),
-                                fontSize: 12,
-                                fontFamily: 'monospace')),
-                      ],
-                    ),
-                  if (live && !attempted) ...[
-                    const SizedBox(height: 16),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                            colors: [Color(0xFF00D4FF), Color(0xFF0055FF)]),
-                        borderRadius: BorderRadius.circular(10),
-                        boxShadow: [
-                          BoxShadow(
-                              color: const Color(0xFF0055FF).withOpacity(0.4),
-                              blurRadius: 8,
-                              offset: const Offset(0, 4))
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: statusColor.withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(8),
+                              border:
+                                  Border.all(color: statusColor.withOpacity(0.5)),
+                            ),
+                            child: Row(
+                              children: [
+                                if (live && !attempted) _BlinkingDot(color: statusColor),
+                                if (live && !attempted) const SizedBox(width: 6),
+                                Text(statusText,
+                                    style: TextStyle(
+                                        color: statusColor,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ),
+                          Text(
+                            live
+                                ? endCountdown(q)
+                                : (upcoming ? startCountdown(q) : ""),
+                            style: TextStyle(
+                                color: Colors.white.withOpacity(0.6),
+                                fontSize: 11,
+                                fontFamily: 'Courier'),
+                          ),
                         ],
                       ),
-                      alignment: Alignment.center,
-                      child: const Text("START MISSION",
-                          style: TextStyle(
+                      const SizedBox(height: 12),
+                      Text(name,
+                          style: const TextStyle(
                               color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1)),
-                    ),
-                  ]
-                ],
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 4),
+                      Builder(builder: (context) {
+                        final String rawCreator = quiz['created_by']?.toString() ?? "Faculty";
+                        final String creator = (rawCreator.toLowerCase().contains("admin") || rawCreator.toLowerCase() == "system")
+                            ? "Admin"
+                            : rawCreator;
+                        return Text(
+                          "Organised by: $creator",
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.6),
+                            fontSize: 12,
+                          ),
+                        );
+                      }),
+                      if (live && !attempted) ...[
+                        const SizedBox(height: 16),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                                colors: [Color(0xFF00D4FF), Color(0xFF00FF88)]),
+                            borderRadius: BorderRadius.circular(12),
+                            boxShadow: [
+                              BoxShadow(
+                                  color: const Color(0xFF00D4FF).withOpacity(0.4),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 4))
+                            ],
+                          ),
+                          alignment: Alignment.center,
+                          child: const Text("START FACULTY QUIZ",
+                              style: TextStyle(
+                                  color: Colors.black,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1)),
+                        ),
+                      ]
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
-        ),
-      ),
+        );
+      }).toList(),
     );
   }
 

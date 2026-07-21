@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'admin_session.dart';
 
 // --- AURUM THEME COLORS ---
 class AurumColors {
@@ -23,22 +24,34 @@ class AurumColors {
 }
 
 class ViewQuizPage extends StatefulWidget {
-  final String token;
-  const ViewQuizPage({Key? key, required this.token}) : super(key: key);
+  final AdminSession session;
+  final int? initialQuizId;
+  const ViewQuizPage({Key? key, required this.session, this.initialQuizId})
+      : super(key: key);
 
   @override
   State<ViewQuizPage> createState() => _ViewQuizPageState();
 }
 
 class _ViewQuizPageState extends State<ViewQuizPage> {
-  final String baseUrl = "https://skillsphere1-0-0.onrender.com";
+  final String baseUrl = "http://localhost:5000";
 
   final TextEditingController quizIdController = TextEditingController();
 
   Map<String, dynamic>? quiz;
   List questions = [];
+  bool answersHidden = false;
   bool loading = false;
   String? error;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialQuizId != null) {
+      quizIdController.text = widget.initialQuizId.toString();
+      WidgetsBinding.instance.addPostFrameCallback((_) => fetchQuiz());
+    }
+  }
 
   Future<void> fetchQuiz() async {
     if (quizIdController.text.isEmpty) {
@@ -50,6 +63,7 @@ class _ViewQuizPageState extends State<ViewQuizPage> {
       loading = true;
       quiz = null;
       questions = [];
+      answersHidden = false;
       error = null;
     });
 
@@ -59,7 +73,7 @@ class _ViewQuizPageState extends State<ViewQuizPage> {
           "$baseUrl/api/admin/faculty-quiz/view?quiz_id=${quizIdController.text}",
         ),
         headers: {
-          "Authorization": "Bearer ${widget.token}",
+          "Authorization": "Bearer ${widget.session.token}",
         },
       );
 
@@ -69,6 +83,7 @@ class _ViewQuizPageState extends State<ViewQuizPage> {
         setState(() {
           quiz = data["quiz"];
           questions = data["questions"];
+          answersHidden = data["answers_hidden"] == true;
         });
       } else {
         setState(() {
@@ -222,13 +237,15 @@ class _ViewQuizPageState extends State<ViewQuizPage> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              "QUIZ #${quiz!["quiz_id"]}",
-                              style: const TextStyle(
-                                color: Colors.black,
-                                fontSize: 20,
-                                fontWeight: FontWeight.w900,
-                                letterSpacing: 1.0,
+                            Expanded(
+                              child: Text(
+                                "${quiz!["quiz_name"] ?? "QUIZ #${quiz!["quiz_id"]}"}",
+                                style: const TextStyle(
+                                  color: Colors.black,
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 1.0,
+                                ),
                               ),
                             ),
                             Container(
@@ -249,10 +266,14 @@ class _ViewQuizPageState extends State<ViewQuizPage> {
                           ],
                         ),
                         const Divider(color: Colors.black12, height: 24),
+                        _buildMetaRow("Quiz ID", "${quiz!["quiz_id"]}"),
+                        const SizedBox(height: 4),
                         _buildMetaRow("Date", "${quiz!["quiz_date"]}"),
                         const SizedBox(height: 4),
                         _buildMetaRow("Time",
                             "${quiz!["quiz_start_time"]} - ${quiz!["quiz_end_time"]}"),
+                        const SizedBox(height: 4),
+                        _buildMetaRow("Duration", "${quiz!["duration_minutes"]} min"),
                         const SizedBox(height: 4),
                         _buildMetaRow("Created By", "${quiz!["created_by"]}"),
                       ],
@@ -260,6 +281,32 @@ class _ViewQuizPageState extends State<ViewQuizPage> {
                   ),
 
                   const SizedBox(height: 24),
+                  if (answersHidden)
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 16),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AurumColors.accentGold.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                            color: AurumColors.accentGold.withOpacity(0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.info_outline,
+                              color: AurumColors.accentGold, size: 18),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              "Only the quiz creator can see answers before the quiz ends at ${quiz!["quiz_end_time"]}.",
+                              style: const TextStyle(
+                                  color: AurumColors.accentGold, fontSize: 12),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   const Text(
                     "QUESTIONS LIST",
                     style: TextStyle(
@@ -328,30 +375,50 @@ class _ViewQuizPageState extends State<ViewQuizPage> {
                             const Divider(color: Colors.white10),
                             const SizedBox(height: 8),
 
-                            // Correct Answer
-                            Row(
-                              children: [
-                                const Icon(Icons.check_circle,
-                                    color: AurumColors.successGreen, size: 18),
-                                const SizedBox(width: 8),
-                                Text(
-                                  "Correct Answer: ",
-                                  style: TextStyle(
-                                    color: AurumColors.successGreen
-                                        .withOpacity(0.8),
-                                    fontSize: 14,
+                            // Correct Answer (hidden for non-creators until
+                            // the quiz's end time passes)
+                            if (q["correct_option"] != null)
+                              Row(
+                                children: [
+                                  const Icon(Icons.check_circle,
+                                      color: AurumColors.successGreen, size: 18),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    "Correct Answer: ",
+                                    style: TextStyle(
+                                      color: AurumColors.successGreen
+                                          .withOpacity(0.8),
+                                      fontSize: 14,
+                                    ),
                                   ),
-                                ),
-                                Text(
-                                  "${q["correct_option"]}".toUpperCase(),
-                                  style: const TextStyle(
-                                    color: AurumColors.successGreen,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.bold,
+                                  Text(
+                                    "${q["correct_option"]}".toUpperCase(),
+                                    style: const TextStyle(
+                                      color: AurumColors.successGreen,
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
-                                ),
-                              ],
-                            ),
+                                ],
+                              )
+                            else
+                              Row(
+                                children: [
+                                  const Icon(Icons.lock_outline,
+                                      color: AurumColors.textGrey, size: 18),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      "Answer hidden until the quiz ends at ${quiz!["quiz_end_time"]}",
+                                      style: const TextStyle(
+                                        color: AurumColors.textGrey,
+                                        fontSize: 13,
+                                        fontStyle: FontStyle.italic,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                           ],
                         ),
                       );

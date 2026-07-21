@@ -3,20 +3,21 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
-// ✅ ADD THIS IMPORT
+// --- IMPORTS ---
 import 'package:placement_portal/pages/quiz_review_page.dart';
 
 class DailyQuizPage extends StatefulWidget {
   final String token;
+  final int? quizId;
 
-  const DailyQuizPage({super.key, required this.token});
+  const DailyQuizPage({super.key, required this.token, this.quizId});
 
   @override
   State<DailyQuizPage> createState() => _DailyQuizPageState();
 }
 
 class _DailyQuizPageState extends State<DailyQuizPage> {
-  final String baseUrl = "https://skillsphere1-0-0.onrender.com";
+  final String baseUrl = "http://localhost:5000";
 
   bool loading = true;
   bool submitting = false;
@@ -26,9 +27,9 @@ class _DailyQuizPageState extends State<DailyQuizPage> {
 
   List questions = [];
   final Map<int, String?> answers = {};
+  String quizDateStr = "";
 
-  static const int quizDurationSeconds = 600;
-  int remainingSeconds = quizDurationSeconds;
+  int remainingSeconds = 0;
   Timer? countdownTimer;
 
   // ================= INIT =================
@@ -36,7 +37,6 @@ class _DailyQuizPageState extends State<DailyQuizPage> {
   void initState() {
     super.initState();
     fetchQuiz();
-    startCountdown();
   }
 
   @override
@@ -71,8 +71,11 @@ class _DailyQuizPageState extends State<DailyQuizPage> {
   // ================= FETCH QUIZ =================
   Future<void> fetchQuiz() async {
     try {
+      final url = widget.quizId != null
+          ? "$baseUrl/daily_quiz?quiz_id=${widget.quizId}"
+          : "$baseUrl/daily_quiz";
       final res = await http.get(
-        Uri.parse("$baseUrl/daily_quiz"),
+        Uri.parse(url),
         headers: {"Authorization": "Bearer ${widget.token}"},
       );
 
@@ -83,42 +86,138 @@ class _DailyQuizPageState extends State<DailyQuizPage> {
         optionsDisabled = true;
         loading = false;
         countdownTimer?.cancel();
-
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (_) => AlertDialog(
-              title: const Text("Quiz Locked"),
-              content: const Text(
-                "You have already attempted today's quiz.\n"
-                "Check profile section for marks.",
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.pop(context);
-                    Navigator.pop(context);
-                  },
-                  child: const Text("OK"),
-                ),
-              ],
-            ),
-          );
-        });
+        _showLockedDialog();
         return;
       }
 
       if (res.statusCode == 200 && data["success"] == true) {
         setState(() {
           questions = data["questions"];
+          quizDateStr = data["quiz_date"] ?? "";
+          remainingSeconds = (data["remaining_seconds"] as num?)?.toInt() ?? 600;
+
+          // Populate pre-saved autosave answers (Stage 15)
+          for (var q in questions) {
+            final qid = q["question_id"];
+            if (q["selected_answer"] != null && q["selected_answer"].toString().isNotEmpty) {
+              answers[qid] = q["selected_answer"].toString();
+            }
+          }
           loading = false;
         });
+        startCountdown();
       } else {
-        loading = false;
+        setState(() => loading = false);
+        _showErrorDialog(data["message"] ?? "Failed to load today's Ai Quiz");
       }
-    } catch (_) {
-      loading = false;
+    } catch (e) {
+      debugPrint("Daily quiz fetch error: $e");
+      setState(() => loading = false);
+      _showErrorDialog("Unable to connect to the server. Please check your internet connection and try again.");
+    }
+  }
+
+  void _showLockedDialog() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => AlertDialog(
+          title: const Text("Quiz Already Attempted"),
+          content: const Text(
+            "You have already attempted this quiz.\n"
+            "You can review your marks and answers anytime from the Student Profile.",
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.pop(context);
+              },
+              child: const Text("OK"),
+            ),
+          ],
+        ),
+      );
+    });
+  }
+
+  void _showSuccessDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.check_circle, color: Colors.green, size: 28),
+            SizedBox(width: 10),
+            Text("Quiz Submitted"),
+          ],
+        ),
+        content: const Text(
+          "Your quiz response has been successfully submitted.\n\n"
+          "You can view your marks and review answers anytime from your Student Profile.",
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF00E5FF),
+              foregroundColor: Colors.black,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+            ),
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.pop(context);
+            },
+            child: const Text("OK", style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showErrorDialog(String msg) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => AlertDialog(
+          title: const Text("Ai Quiz"),
+          content: Text(msg),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.pop(context);
+              },
+              child: const Text("OK"),
+            ),
+          ],
+        ),
+      );
+    });
+  }
+
+  // ================= AUTOSAVE ANSWER =================
+  Future<void> autosaveAnswer(int questionId, String selectedAnswer) async {
+    if (quizDateStr.isEmpty) return;
+    try {
+      await http.post(
+        Uri.parse("$baseUrl/api/daily_quiz/autosave"),
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer ${widget.token}",
+        },
+        body: jsonEncode({
+          "quiz_date": quizDateStr,
+          "quiz_id": widget.quizId,
+          "question_id": questionId,
+          "selected_answer": selectedAnswer,
+        }),
+      );
+    } catch (e) {
+      print("Autosave error: $e");
     }
   }
 
@@ -133,10 +232,11 @@ class _DailyQuizPageState extends State<DailyQuizPage> {
 
     try {
       final payload = {
+        "quiz_id": widget.quizId,
         "answers": questions.map((q) {
           return {
             "question_id": q["question_id"],
-            "selected_answer": answers[q["question_id"]],
+            "selected_answer": answers[q["question_id"]] ?? "",
           };
         }).toList(),
       };
@@ -153,29 +253,22 @@ class _DailyQuizPageState extends State<DailyQuizPage> {
       setState(() => submitting = false);
       if (!mounted) return;
 
-      // ✅ AUTO SUBMIT → OPEN REVIEW PAGE
-      if (auto && res.statusCode == 200) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => QuizReviewPage(token: widget.token),
-          ),
-        );
-        return;
-      }
-
-      // ✅ MANUAL SUBMIT → OPEN REVIEW PAGE
       if (res.statusCode == 200) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => QuizReviewPage(token: widget.token),
-          ),
-        );
+        _showSuccessDialog();
+      } else {
+        final data = jsonDecode(res.body);
+        _showSubmitError(data["error"] ?? "Failed to submit quiz");
       }
     } catch (_) {
       setState(() => submitting = false);
+      _showSubmitError("Network error submitting quiz");
     }
+  }
+
+  void _showSubmitError(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg)),
+    );
   }
 
   // ================= BACK BLOCK =================
@@ -196,7 +289,7 @@ class _DailyQuizPageState extends State<DailyQuizPage> {
       onWillPop: onWillPop,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text("Daily Placement Quiz"),
+          title: const Text("Daily Skill Quiz"),
           automaticallyImplyLeading: false,
         ),
         body: loading
@@ -263,6 +356,9 @@ class _DailyQuizPageState extends State<DailyQuizPage> {
                                                 setState(() {
                                                   answers[qid] = val;
                                                 });
+                                                if (val != null) {
+                                                  autosaveAnswer(qid, val);
+                                                }
                                               },
                                       );
                                     }),
