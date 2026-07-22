@@ -7249,6 +7249,105 @@ def admin_daily_quiz_full_class(current_admin):
         conn.close()
 
 
+@app.route("/api/admin/super/quiz-generation-analytics", methods=["GET", "OPTIONS"])
+@admin_token_required
+@role_required("super_admin", "admin")
+def super_admin_quiz_generation_analytics(admin):
+    if request.method == "OPTIONS":
+        return jsonify({"success": True}), 200
+
+    filter_date = request.args.get("date")
+    if not filter_date:
+        filter_date = today_ist().strftime("%Y-%m-%d")
+
+    filter_year = request.args.get("year", type=int)
+    years_to_check = [filter_year] if filter_year in (1, 2, 3, 4) else [1, 2, 3, 4]
+
+    conn = None
+    cur = None
+    try:
+        conn = get_db()
+        cur = conn.cursor(pymysql.cursors.DictCursor)
+
+        all_quizzes = []
+        total_sets_today = 0
+        total_questions_today = 0
+        total_generation_seconds = 0
+        completed_quizzes_count = 0
+
+        for y in years_to_check:
+            table = f"daily_quiz_topics_y{y}"
+            cur.execute(f"""
+                SELECT t.id, t.title, t.subject, t.topic, t.department, t.difficulty,
+                       t.status, t.total_students, t.question_per_set, t.total_sets_required,
+                       t.generated_sets, t.generated_questions, t.failed_sets, t.total_questions,
+                       t.created_at, t.created_by, t.quiz_date,
+                       a.name AS created_by_name
+                FROM {table} t
+                LEFT JOIN admins a ON a.email = t.created_by
+                WHERE t.quiz_date = %s AND t.quiz_type = 'placement'
+                ORDER BY t.created_at DESC
+            """, (filter_date,))
+            topics = cur.fetchall()
+
+            for top in topics:
+                qid = top["id"]
+                cur.execute("""
+                    SELECT MIN(updated_at) as first_upd, MAX(updated_at) as last_upd
+                    FROM daily_quiz_generation_queue
+                    WHERE quiz_id = %s
+                """, (qid,))
+                q_info = cur.fetchone() or {}
+
+                start_time = top.get("created_at") or q_info.get("first_upd")
+                end_time = q_info.get("last_upd") or top.get("created_at")
+
+                duration_sec = 0
+                if start_time and end_time and end_time >= start_time:
+                    duration_sec = int((end_time - start_time).total_seconds())
+
+                mins = duration_sec // 60
+                secs = duration_sec % 60
+                formatted_duration = f"{mins} min {secs} sec" if mins > 0 else f"{secs} sec"
+
+                if top["status"] in ("READY", "COMPLETED"):
+                    total_generation_seconds += duration_sec
+                    completed_quizzes_count += 1
+
+                total_sets_today += (top.get("generated_sets") or 0)
+                total_questions_today += (top.get("generated_questions") or 0)
+
+                top["year"] = y
+                top["quiz_date"] = str(top["quiz_date"])
+                top["created_at"] = str(top["created_at"]) if top.get("created_at") else ""
+                top["duration_seconds"] = duration_sec
+                top["formatted_duration"] = formatted_duration
+                all_quizzes.append(top)
+
+        avg_seconds = (total_generation_seconds // completed_quizzes_count) if completed_quizzes_count > 0 else 0
+        avg_mins = avg_seconds // 60
+        avg_secs = avg_seconds % 60
+        formatted_avg = f"{avg_mins} min {avg_secs} sec" if avg_mins > 0 else f"{avg_secs} sec"
+
+        return jsonify({
+            "success": True,
+            "date": filter_date,
+            "summary": {
+                "total_sets_generated": total_sets_today,
+                "total_questions_pregenerated": total_questions_today,
+                "total_quizzes_count": len(all_quizzes),
+                "avg_generation_time": formatted_avg,
+            },
+            "quizzes": all_quizzes
+        }), 200
+
+    except Exception as e:
+        return generic_error_response(e)
+    finally:
+        if cur: cur.close()
+        if conn: conn.close()
+
+
 @app.route("/api/admin/daily-quiz/reset-student", methods=["POST", "OPTIONS"])
 @admin_token_required
 def reset_daily_quiz_for_student(admin):

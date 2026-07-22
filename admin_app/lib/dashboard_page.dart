@@ -10,6 +10,7 @@ import 'login_page.dart';
 import 'admin_session.dart';
 import 'departments_page.dart';
 import 'staff_management_page.dart';
+import 'super_admin_generation_analytics_page.dart';
 
 // --- AURUM THEME COLORS ---
 class AurumColors {
@@ -375,8 +376,23 @@ class _DashboardPageState extends State<DashboardPage> {
                       ),
                     ),
 
-                    // 5. Departments (super_admin/admin only)
+                    // 5. Departments & Generation Analytics (super_admin/admin only)
                     if (widget.session.isSuperAdmin) ...[
+                      const SizedBox(height: 16),
+                      _buildWideActionTile(
+                        title: "Generation Analytics",
+                        subtitle:
+                            "Track sets generated, AI speed & generation duration",
+                        icon: Icons.analytics_rounded,
+                        colorStart: const Color(0xFFF2D06B),
+                        colorEnd: const Color(0xFFC7930D),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) =>
+                                  SuperAdminGenerationAnalyticsPage(session: widget.session)),
+                        ),
+                      ),
                       const SizedBox(height: 16),
                       _buildWideActionTile(
                         title: "Departments",
