@@ -1424,24 +1424,14 @@ def get_daily_quiz(year, quiz_type, uid, quiz_id=None):
             used_fallback = False
 
             if not set_row:
-                # Backwards compatibility fallback to date if sets don't have quiz_id yet
-                used_fallback = True
-                if was_reset:
-                    cur.execute("""
-                        SELECT set_number
-                        FROM daily_quiz_sets
-                        WHERE quiz_date = %s AND year = %s
-                        ORDER BY RAND()
-                        LIMIT 1
-                    """, (today, year))
-                else:
-                    cur.execute("""
-                        SELECT set_number
-                        FROM daily_quiz_sets
-                        WHERE quiz_date = %s AND year = %s AND status = 'AVAILABLE'
-                        ORDER BY RAND()
-                        LIMIT 1
-                    """, (today, year))
+                # If all unique AVAILABLE sets for this quiz_id are exhausted, draw from any set for this quiz_id
+                cur.execute("""
+                    SELECT set_number
+                    FROM daily_quiz_sets
+                    WHERE quiz_id = %s
+                    ORDER BY RAND()
+                    LIMIT 1
+                """, (quiz_id,))
                 set_row = cur.fetchone()
 
             if not set_row:
@@ -1457,16 +1447,10 @@ def get_daily_quiz(year, quiz_type, uid, quiz_id=None):
             # which intentionally re-picks from the full pool without
             # affecting DONE/AVAILABLE status.
             if not was_reset:
-                if used_fallback:
-                    cur.execute("""
-                        UPDATE daily_quiz_sets SET status = 'DONE'
-                        WHERE quiz_date = %s AND year = %s AND set_number = %s
-                    """, (today, year, allocated_set))
-                else:
-                    cur.execute("""
-                        UPDATE daily_quiz_sets SET status = 'DONE'
-                        WHERE quiz_id = %s AND set_number = %s
-                    """, (quiz_id, allocated_set))
+                cur.execute("""
+                    UPDATE daily_quiz_sets SET status = 'DONE'
+                    WHERE quiz_id = %s AND set_number = %s
+                """, (quiz_id, allocated_set))
             else:
                 cur.execute(
                     "DELETE FROM daily_quiz_reset_students WHERE uid=%s AND quiz_id=%s",
@@ -1496,12 +1480,12 @@ def get_daily_quiz(year, quiz_type, uid, quiz_id=None):
             questions = cur.fetchall()
             
             if not questions:
-                # Backwards compatibility fallback to date if pregenerated don't have quiz_id yet
+                # Fallback to any pregenerated questions for this specific quiz_id
                 cur.execute("""
                     SELECT question, option_a, option_b, option_c, option_d, correct_option
                     FROM daily_quiz_questions_pregenerated
-                    WHERE year = %s AND quiz_date = %s AND set_number = %s
-                """, (year, today, allocated_set))
+                    WHERE quiz_id = %s
+                """, (quiz_id,))
                 questions = cur.fetchall()
 
             conn.begin()
@@ -4852,7 +4836,7 @@ def insert_daily_quiz_topic(admin):
         except Exception as e:
             print("Error fetching student count:", e)
 
-        # Generate one unique set per student
+        # Dynamically set total_sets equal to student_count for that class/department
         total_sets = max(1, student_count)
 
         # 🔒 INSERT TOPIC
