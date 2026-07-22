@@ -1,10 +1,10 @@
 import 'dart:convert';
-import 'dart:html' as html;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'admin_session.dart';
 
 // --- AURUM THEME COLORS ---
@@ -115,25 +115,18 @@ class _AddFacultyQuizPageState extends State<AddFacultyQuizPage> {
   // =========================
   // SAMPLE CSV DOWNLOAD
   // =========================
-  // The endpoint requires an admin token, so it can't just be opened in a
-  // new tab (window.open sends no Authorization header). Fetch it with the
-  // token instead and trigger the browser download via a blob URL.
+  // The endpoint is public (a generic template, no real quiz data), so it
+  // can just be handed to the OS/browser directly - works the same on web
+  // (opens/downloads in a new tab), Android and iOS (opens in the browser,
+  // which downloads it), unlike the old dart:html Blob approach which only
+  // existed on web and broke native builds outright.
   Future<void> downloadSampleCsv() async {
+    final uri = Uri.parse("$baseUrl/api/admin/faculty-quiz/sample-csv");
     try {
-      final res = await http.get(
-        Uri.parse("$baseUrl/api/admin/faculty-quiz/sample-csv"),
-        headers: {"Authorization": "Bearer ${widget.session.token}"},
-      );
-      if (res.statusCode != 200) {
+      final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!launched) {
         showError("Could not download sample CSV");
-        return;
       }
-      final blob = html.Blob([res.bodyBytes], "text/csv");
-      final url = html.Url.createObjectUrlFromBlob(blob);
-      html.AnchorElement(href: url)
-        ..setAttribute("download", "faculty_quiz_sample.csv")
-        ..click();
-      html.Url.revokeObjectUrl(url);
     } catch (e) {
       debugPrint("Sample CSV download error: $e");
       showError("Could not download sample CSV. Please try again.");

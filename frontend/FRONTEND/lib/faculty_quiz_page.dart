@@ -79,26 +79,6 @@ class _FacultyQuizPageState extends State<FacultyQuizPage> with WidgetsBindingOb
 
       if (_warningCount >= _maxWarnings) {
         submitFacultyQuiz(auto: true);
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (_) => AlertDialog(
-            title: const Text("Quiz Auto-Submitted"),
-            content: const Text(
-              "You left or switched away from the quiz multiple times. "
-              "Your answers so far have been automatically submitted.",
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  Navigator.pop(context);
-                },
-                child: const Text("OK"),
-              ),
-            ],
-          ),
-        );
         return;
       }
 
@@ -300,28 +280,26 @@ class _FacultyQuizPageState extends State<FacultyQuizPage> with WidgetsBindingOb
       optionsDisabled = true;
       setState(() => submitting = false);
 
-      if (auto && response.statusCode == 200) {
-        Navigator.pop(context);
-        return;
-      }
-
       if (response.statusCode == 200) {
         showDialog(
           context: context,
           barrierDismissible: false,
-          builder: (_) => const AlertDialog(
-            title: Text("Quiz Submitted"),
+          builder: (_) => AlertDialog(
+            title: Text(auto ? "Quiz Auto-Submitted" : "Quiz Submitted"),
             content: Text(
-              "Faculty quiz submitted successfully.\n"
-              "Check profile section for marks.",
+              auto
+                  ? "You left/switched away from the quiz or time expired. Your answers have been submitted.\n\nRedirecting back in 5 seconds..."
+                  : "Faculty quiz submitted successfully.\n\nRedirecting back in 5 seconds...",
             ),
           ),
         );
 
-        Future.delayed(const Duration(seconds: 4), () {
+        Future.delayed(const Duration(seconds: 5), () {
           if (!mounted) return;
           Navigator.of(context, rootNavigator: true).pop();
-          Navigator.of(context).pop();
+          if (mounted) {
+            Navigator.of(context).pop();
+          }
         });
       } else {
         final data = jsonDecode(response.body);

@@ -2316,7 +2316,7 @@ def quiz_review(current_user):
                     correct_answer,
                     student_answer
                 FROM {bank_table}
-                WHERE uid=%s AND quiz_date=%s AND quiz_id=%s
+                WHERE uid=%s AND quiz_date=%s AND (quiz_id=%s OR quiz_id IS NULL)
                 ORDER BY id ASC
                 """,
                 (uid, quiz_date, actual_quiz_id)
@@ -2685,26 +2685,38 @@ def faculty_quiz(current_user):
         )
         attempt = cur.fetchone()
 
+        now_ist = datetime.now(IST)
+        now_naive = now_ist.replace(tzinfo=None)
+
         if not attempt:
-            now = datetime.now(IST)
             start_t = parse_time_field(quiz["quiz_start_time"])
             end_t = parse_time_field(quiz["quiz_end_time"])
-            if start_t and now < IST.localize(datetime.combine(quiz["quiz_date"], start_t)):
+            if start_t and now_ist < IST.localize(datetime.combine(quiz["quiz_date"], start_t)):
                 return jsonify({"success": False, "message": f"Quiz starts at {start_t.strftime('%I:%M %p')}. Please try again then."}), 400
-            if end_t and now > IST.localize(datetime.combine(quiz["quiz_date"], end_t)):
+            if end_t and now_ist > IST.localize(datetime.combine(quiz["quiz_date"], end_t)):
                 return jsonify({"success": False, "message": f"Quiz has ended at {end_t.strftime('%I:%M %p')}."}), 400
 
             cur.execute(
-                "INSERT INTO faculty_quiz_attempts (uid, quiz_id, started_at) VALUES (%s, %s, NOW())",
-                (uid, quiz_id),
+                "INSERT INTO faculty_quiz_attempts (uid, quiz_id, started_at) VALUES (%s, %s, %s)",
+                (uid, quiz_id, now_naive.strftime("%Y-%m-%d %H:%M:%S")),
             )
             conn.commit()
-            started_at = now.replace(tzinfo=None)
+            started_at = now_naive
         else:
             started_at = attempt["started_at"]
+            if isinstance(started_at, str):
+                try:
+                    started_at = datetime.strptime(started_at, "%Y-%m-%d %H:%M:%S")
+                except Exception:
+                    started_at = now_naive
+            elif isinstance(started_at, datetime) and started_at.tzinfo is not None:
+                started_at = started_at.astimezone(IST).replace(tzinfo=None)
 
-        elapsed = (datetime.now() - started_at).total_seconds()
-        remaining_seconds = max(0, int(quiz["duration_minutes"]) * 60 - int(elapsed))
+        elapsed = (now_naive - started_at).total_seconds()
+        if elapsed < 0:
+            elapsed = 0
+        duration_secs = int(quiz["duration_minutes"]) * 60
+        remaining_seconds = max(0, min(duration_secs, duration_secs - int(elapsed)))
 
         # 4️⃣ Fetch questions
         cur.execute(
@@ -6550,8 +6562,12 @@ def search_faculty_quiz(admin):
 
 
 @app.route("/api/admin/faculty-quiz/sample-csv", methods=["GET"])
-@admin_token_required
-def faculty_quiz_sample_csv(admin):
+def faculty_quiz_sample_csv():
+    # Public on purpose: this is a generic CSV template with no real quiz
+    # content, and making it public lets clients open it as a plain URL
+    # (external browser / native "open" intent) instead of needing to
+    # attach an Authorization header, which isn't possible when the OS
+    # handles the download outside the app (e.g. on mobile).
     return send_from_directory(
         os.path.join(os.path.dirname(__file__), "static"),
         "faculty_quiz_sample.csv",

@@ -7,6 +7,19 @@ build/
 *.apk
 *.aab
 
+# Android release signing - machine-local secret, never portable/committed
+# (same reasoning as .env below: losing this breaks nothing, but leaking it
+# lets anyone sign updates as this app)
+**/android/key.properties
+**/android/keystore/
+**/*.jks
+**/*.keystore
+
+# Machine-local Gradle truststore (JDK cacerts + this machine's Avast
+# TLS-interception root) - same reasoning as backend/backend_flask/certs/,
+# not portable between machines.
+**/android/truststore/
+
 # Python
 **/venv/
 **/.env

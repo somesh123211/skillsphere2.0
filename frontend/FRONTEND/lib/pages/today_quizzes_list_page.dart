@@ -201,7 +201,21 @@ class _TodayQuizzesListPageState extends State<TodayQuizzesListPage> {
                                 ),
                                 child: InkWell(
                                   borderRadius: BorderRadius.circular(14),
-                                  onTap: null,
+                                  onTap: () {
+                                    final dynamic rawId = q["quiz_id"] ?? q["id"];
+                                    final int? qId = rawId != null ? int.tryParse(rawId.toString()) : null;
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => QuizReviewPage(
+                                          token: widget.token,
+                                          quizId: qId,
+                                          isFacultyQuiz: isFaculty,
+                                          quizTitle: quizName,
+                                        ),
+                                      ),
+                                    );
+                                  },
                                   child: Padding(
                                     padding: const EdgeInsets.all(16),
                                     child: Row(

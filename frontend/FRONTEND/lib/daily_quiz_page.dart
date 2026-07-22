@@ -76,26 +76,6 @@ class _DailyQuizPageState extends State<DailyQuizPage> with WidgetsBindingObserv
 
       if (_warningCount >= _maxWarnings) {
         submitQuiz(auto: true);
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (_) => AlertDialog(
-            title: const Text("Quiz Auto-Submitted"),
-            content: const Text(
-              "You left or switched away from the quiz multiple times. "
-              "Your answers so far have been automatically submitted.",
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  Navigator.pop(context);
-                },
-                child: const Text("OK"),
-              ),
-            ],
-          ),
-        );
         return;
       }
 
@@ -220,22 +200,24 @@ class _DailyQuizPageState extends State<DailyQuizPage> with WidgetsBindingObserv
     });
   }
 
-  void _showSuccessDialog() {
+  void _showSuccessDialog({bool auto = false}) {
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.check_circle, color: Colors.green, size: 28),
-            SizedBox(width: 10),
-            Text("Quiz Submitted"),
+            Icon(auto ? Icons.warning_amber_rounded : Icons.check_circle,
+                color: auto ? Colors.orangeAccent : Colors.green, size: 28),
+            const SizedBox(width: 10),
+            Text(auto ? "Quiz Auto-Submitted" : "Quiz Submitted"),
           ],
         ),
-        content: const Text(
-          "Your quiz response has been successfully submitted.\n\n"
-          "You can view your marks and review answers anytime from your Student Profile.",
+        content: Text(
+          auto
+              ? "You left/switched away from the quiz or time expired. Your answers have been submitted.\n\nRedirecting back in 5 seconds..."
+              : "Your quiz response has been successfully submitted.\n\nRedirecting back in 5 seconds...",
         ),
         actions: [
           ElevatedButton(
@@ -245,14 +227,22 @@ class _DailyQuizPageState extends State<DailyQuizPage> with WidgetsBindingObserv
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             ),
             onPressed: () {
-              Navigator.pop(context);
-              Navigator.pop(context);
+              Navigator.of(context, rootNavigator: true).pop();
+              Navigator.of(context).pop();
             },
             child: const Text("OK", style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
     );
+
+    Future.delayed(const Duration(seconds: 5), () {
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    });
   }
 
   void _showErrorDialog(String msg) {
@@ -335,7 +325,7 @@ class _DailyQuizPageState extends State<DailyQuizPage> with WidgetsBindingObserv
       if (!mounted) return;
 
       if (res.statusCode == 200) {
-        _showSuccessDialog();
+        _showSuccessDialog(auto: auto);
       } else {
         final data = jsonDecode(res.body);
         _showSubmitError(data["error"] ?? "Failed to submit quiz");
