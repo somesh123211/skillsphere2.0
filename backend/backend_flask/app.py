@@ -5844,6 +5844,152 @@ def build_and_send_quiz_csv_report(year, quiz_id):
             conn.close()
 
 
+def build_and_send_faculty_quiz_report(quiz_id):
+    conn = None
+    cur = None
+    try:
+        conn = get_db()
+        cur = conn.cursor(pymysql.cursors.DictCursor)
+
+        conn.begin()
+        cur.execute(
+            """
+            SELECT quiz_id, quiz_name, quiz_date, quiz_start_time, quiz_end_time,
+                   year, created_by, duration_minutes, department, COALESCE(csv_sent, 0) AS csv_sent
+            FROM faculty_quiz_master
+            WHERE quiz_id = %s FOR UPDATE
+            """,
+            (quiz_id,)
+        )
+        quiz = cur.fetchone()
+        if not quiz or not quiz.get("created_by") or quiz.get("csv_sent"):
+            conn.rollback()
+            return
+
+        creator_email = quiz["created_by"]
+        cur.execute("SELECT name FROM admins WHERE email=%s", (creator_email,))
+        creator_row = cur.fetchone()
+        quiz["created_by_name"] = creator_row["name"] if creator_row else creator_email
+
+        cur.execute(
+            """
+            SELECT id, question, option_a, option_b, option_c, option_d, correct_option
+            FROM faculty_quiz_questions_new
+            WHERE quiz_id = %s
+            ORDER BY id
+            """,
+            (quiz_id,)
+        )
+        rows = cur.fetchall()
+        if not rows:
+            cur.execute("UPDATE faculty_quiz_master SET csv_sent=1 WHERE quiz_id=%s", (quiz_id,))
+            conn.commit()
+            return
+
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(["Question Number", "Question", "Option A", "Option B", "Option C", "Option D", "Correct Option"])
+        for idx, r in enumerate(rows, start=1):
+            writer.writerow([
+                idx, r["question"], r["option_a"], r["option_b"],
+                r["option_c"], r["option_d"], r["correct_option"]
+            ])
+        questions_csv_bytes = buf.getvalue().encode("utf-8")
+
+        year = quiz.get("year") or 1
+        quiz_dept = quiz.get("department") or ""
+        quiz_dept_id = BRANCH_TO_DEPT_ID.get(quiz_dept)
+
+        marks_pdf_bytes = None
+        if quiz_dept_id is not None:
+            cur.execute(
+                """
+                SELECT s.uid, s.name, fa.score, fa.total,
+                       CASE WHEN fa.uid IS NULL THEN 'Not Attempted' ELSE 'Attempted' END AS attempt_status
+                FROM students s
+                LEFT JOIN faculty_quiz_attempts fa
+                    ON s.uid = fa.uid AND fa.quiz_id = %s
+                WHERE CAST(s.year AS UNSIGNED) = %s AND s.dept_id = %s
+                ORDER BY s.uid
+                """,
+                (quiz_id, year, quiz_dept_id)
+            )
+            marks_rows = cur.fetchall()
+            if marks_rows:
+                quiz["title"] = quiz["quiz_name"]
+                quiz["topic"] = quiz["quiz_name"]
+                quiz["subject"] = "Faculty Quiz"
+                quiz["year"] = year
+                marks_pdf_bytes = build_marks_pdf(quiz, quiz_id, marks_rows)
+
+        subject = f"Faculty Quiz Report - {quiz['quiz_name']} ({quiz['quiz_date']})"
+        html_body = f"""
+            <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+                <h2 style="color: #1E293B;">Skill Sphere — Faculty Quiz Evaluation Report</h2>
+                <p>Dear {quiz['created_by_name']},</p>
+                <p>The evaluation period for your faculty quiz has completed. Attached are the official test evaluation reports:</p>
+                <p><strong>Quiz Name:</strong> {quiz['quiz_name']}<br>
+                <strong>Academic Year:</strong> Year {year}<br>
+                <strong>Department:</strong> {quiz_dept}<br>
+                <strong>Date:</strong> {quiz['quiz_date']}<br>
+                <strong>Timings:</strong> {quiz['quiz_start_time']} - {quiz['quiz_end_time']} ({quiz.get('duration_minutes', 10)} mins duration)</p>
+                <ul>
+                    <li><strong>faculty_quiz_{quiz_id}_questions.csv</strong> — Question paper & answer key.</li>
+                    {"<li><strong>faculty_quiz_" + str(quiz_id) + "_marks.pdf</strong> — Student performance roster for your department.</li>" if marks_pdf_bytes else ""}
+                </ul>
+                <p>Best regards,<br><strong>Skill Sphere Automation Engine</strong></p>
+            </div>
+        """
+
+        attachments = [(questions_csv_bytes, f"faculty_quiz_{quiz_id}_questions.csv")]
+        if marks_pdf_bytes:
+            attachments.append((marks_pdf_bytes, f"faculty_quiz_{quiz_id}_marks.pdf"))
+
+        send_email_with_attachments(creator_email, subject, html_body, attachments)
+
+        cur.execute("UPDATE faculty_quiz_master SET csv_sent=1 WHERE quiz_id=%s", (quiz_id,))
+        conn.commit()
+        print(f"[Maintenance] Emailed Faculty Quiz report for quiz_id={quiz_id} to {creator_email}")
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        print(f"[Maintenance] Faculty Quiz report email failed for quiz_id={quiz_id}:", e)
+    finally:
+        if cur: cur.close()
+        if conn: conn.close()
+
+
+def scan_and_send_faculty_quiz_reports():
+    try:
+        now_ist = datetime.now(IST)
+        conn = get_db()
+        cur = conn.cursor(pymysql.cursors.DictCursor)
+        cur.execute(
+            """
+            SELECT quiz_id, quiz_date, quiz_end_time, duration_minutes
+            FROM faculty_quiz_master
+            WHERE COALESCE(csv_sent, 0) = 0
+            """
+        )
+        quizzes = cur.fetchall()
+        cur.close()
+        conn.close()
+
+        for q in quizzes:
+            end_time = parse_time_field(q["quiz_end_time"])
+            if not end_time:
+                continue
+            end_dt_naive = datetime.combine(q["quiz_date"], end_time)
+            end_dt = IST.localize(end_dt_naive)
+            duration_minutes = q.get("duration_minutes") or 10
+            cutoff_dt = end_dt + timedelta(minutes=duration_minutes + CSV_REPORT_GRACE_MINUTES)
+
+            if now_ist > cutoff_dt:
+                build_and_send_faculty_quiz_report(q["quiz_id"])
+    except Exception as e:
+        print("[Maintenance] Faculty Quiz report scan failed:", e)
+
+
 def purge_old_daily_quiz_data():
     # Deletes only the bulky, regenerable-or-already-emailed data: the
     # per-student generated question bank, per-question answer rows, and
@@ -6124,6 +6270,7 @@ def run_daily_quiz_maintenance():
 
     auto_finalize_abandoned_daily_quizzes()
     auto_finalize_abandoned_faculty_quizzes()
+    scan_and_send_faculty_quiz_reports()
     purge_old_daily_quiz_data()
 
 
