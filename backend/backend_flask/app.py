@@ -6987,7 +6987,15 @@ def list_daily_quizzes_for_date(admin):
             t.id, t.subject, t.topic, t.department, t.difficulty, t.total_questions, t.status,
             t.created_by, a.name AS created_by_name
         """
-        if department:
+        if admin["role"] == "faculty":
+            cur.execute(f"""
+                SELECT {select_cols}
+                FROM {table} t
+                LEFT JOIN admins a ON a.email = t.created_by
+                WHERE t.quiz_date = %s AND t.quiz_type = 'placement' AND t.created_by = %s
+                ORDER BY t.id ASC
+            """, (quiz_date, admin["email"]))
+        elif department:
             cur.execute(f"""
                 SELECT {select_cols}
                 FROM {table} t
@@ -7056,11 +7064,14 @@ def admin_daily_quiz_full_class(current_admin):
                 "message": "Quiz not found"
             }), 404
 
-        # hod and faculty may view department quizzes
+        # hod may only view its own department's quizzes; faculty is
+        # further narrowed to only the quizzes they personally created.
         if current_admin["role"] in ("hod", "faculty"):
             own_department = DEPT_ID_TO_BRANCH.get(current_admin["dept_id"])
             if quiz["department"] != own_department:
                 return jsonify({"success": False, "message": "Quiz not in your department"}), 403
+        if current_admin["role"] == "faculty" and quiz["created_by"] != current_admin["email"]:
+            return jsonify({"success": False, "message": "You can only view quizzes you created"}), 403
 
         # ---------------- STUDENTS + MARKS ----------------
         # Scoped to the quiz's own department - a quiz only ever went out
