@@ -23,7 +23,7 @@ HEADERS = {
 
 
 class StudentAppUser(HttpUser):
-    wait_time = between(1, 3)
+    wait_time = between(0.1, 0.5)
     host = "https://skillsphere2-0.onrender.com"
 
     def on_start(self):
