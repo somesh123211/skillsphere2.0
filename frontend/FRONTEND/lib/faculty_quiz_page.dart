@@ -41,7 +41,7 @@ class _FacultyQuizPageState extends State<FacultyQuizPage> with WidgetsBindingOb
   // ================= INIT =================
   bool _wasBackgrounded = false;
   int _warningCount = 0;
-  static const int _maxWarnings = 2;
+  static const int _maxWarnings = 3;
 
   @override
   void initState() {
