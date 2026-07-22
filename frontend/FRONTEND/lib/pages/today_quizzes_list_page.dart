@@ -183,12 +183,14 @@ class _TodayQuizzesListPageState extends State<TodayQuizzesListPage> {
                               final bool isEnded = q["is_ended"] == true;
                               final int score = q["score"] ?? 0;
                               final int total = q["total"] ?? 0;
-                              final String quizName = q["quiz_name"] ?? "Quiz Attempt";
+                               final String quizName = q["quiz_name"] ?? "Quiz Attempt";
                               final String rawCreator = q["created_by"] ?? (isFaculty ? "Faculty" : "Admin");
                               final String creator = (rawCreator.toLowerCase().contains("admin") || rawCreator.toLowerCase() == "system")
                                   ? "Admin"
                                   : rawCreator;
                               final String subject = q["subject"] ?? (isFaculty ? "Faculty Quiz" : "Daily Target");
+                              final String deptCode = q["department"]?.toString() ?? "";
+                              final String displayDept = resolveDepartmentName(deptCode.isNotEmpty ? deptCode : 'AI');
 
                               return Container(
                                 margin: const EdgeInsets.only(bottom: 12),
@@ -250,12 +252,12 @@ class _TodayQuizzesListPageState extends State<TodayQuizzesListPage> {
                                               ),
                                               const SizedBox(height: 4),
                                               Text(
-                                                "Organised by: $creator  ·  Department: ${resolveDepartmentName(subject)}",
+                                                "Organised by: $creator  ·  Department: $displayDept  ·  Subject: $subject",
                                                 style: const TextStyle(
                                                   color: Colors.white60,
                                                   fontSize: 11,
                                                 ),
-                                              ),
+                                              ),,
                                               const SizedBox(height: 4),
                                               if (isFaculty) ...[
                                                 Text(

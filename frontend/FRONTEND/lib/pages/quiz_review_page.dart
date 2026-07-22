@@ -34,6 +34,7 @@ class _QuizReviewPageState extends State<QuizReviewPage> {
   String quizName = "Quiz Results";
   String quizDate = "";
   String quizSubject = "General";
+  String quizDepartment = "AI";
   String createdBy = "Admin";
   String startTime = "";
   String endTime = "";
@@ -87,6 +88,7 @@ class _QuizReviewPageState extends State<QuizReviewPage> {
             quizName = response.data["quiz_name"] ?? widget.quizTitle ?? "Quiz Results";
             quizDate = response.data["quiz_date"] ?? "";
             quizSubject = response.data["subject"] ?? "General";
+            quizDepartment = response.data["department"] ?? "AI";
             createdBy = formatCreator(response.data["created_by"] ?? "Admin");
             startTime = response.data["start_time"] ?? response.data["quiz_start_time"] ?? "";
             endTime = response.data["end_time"] ?? response.data["quiz_end_time"] ?? "";
@@ -279,7 +281,7 @@ class _QuizReviewPageState extends State<QuizReviewPage> {
                         ),
                         pw.SizedBox(height: 3),
                         pw.Text(
-                          "Department: ${safeStr(resolveDepartmentName(quizSubject))}",
+                          "Department: ${safeStr(resolveDepartmentName(quizDepartment))}  |  Subject: ${safeStr(quizSubject)}",
                           style: pw.TextStyle(
                             fontSize: 10,
                             fontWeight: pw.FontWeight.bold,
@@ -560,8 +562,11 @@ class _QuizReviewPageState extends State<QuizReviewPage> {
                                     style: const TextStyle(color: Colors.amberAccent, fontSize: 11, fontWeight: FontWeight.w500)),
                               ],
                               const Text("•", style: TextStyle(color: Colors.white38, fontSize: 11)),
-                              Text("Department: ${resolveDepartmentName(quizSubject)}",
+                              Text("Department: ${resolveDepartmentName(quizDepartment)}",
                                   style: const TextStyle(color: Colors.cyanAccent, fontSize: 11, fontWeight: FontWeight.w600)),
+                              const Text("•", style: TextStyle(color: Colors.white38, fontSize: 11)),
+                              Text("Subject: $quizSubject",
+                                  style: const TextStyle(color: Colors.greenAccent, fontSize: 11, fontWeight: FontWeight.w600)),
                               const Text("•", style: TextStyle(color: Colors.white38, fontSize: 11)),
                               Text("Organised by: $createdBy",
                                   style: const TextStyle(color: goldColor, fontSize: 11, fontWeight: FontWeight.bold)),

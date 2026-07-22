@@ -496,7 +496,7 @@ def login():
                 "uid": user["uid"],
                 "year": user["year"],
                 "branch": user["branch"],
-                "exp": datetime.utcnow() + timedelta(hours=12)
+                "exp": datetime.utcnow() + timedelta(days=7)
             },
             SECRET_KEY,
             algorithm="HS256"
@@ -1891,6 +1891,7 @@ def profile_today_quizzes(current_user):
                     a.attempted_at,
                     t.topic,
                     t.subject,
+                    t.department,
                     t.created_by,
                     ad.name AS creator_name,
                     ad.role AS creator_role
@@ -1906,6 +1907,7 @@ def profile_today_quizzes(current_user):
             for r in rows:
                 title = r["topic"] or r["subject"] or f"AI Daily Quiz #{r['quiz_id'] or r['attempt_id']}"
                 subj = r["subject"] or r["topic"] or "Daily Target"
+                dept = r.get("department") or current_user.get("branch") or "AI"
 
                 role = (r.get("creator_role") or "").lower()
                 cname = (r.get("creator_name") or "").strip()
@@ -1921,6 +1923,7 @@ def profile_today_quizzes(current_user):
                     "attempt_id": r["attempt_id"],
                     "quiz_name": title,
                     "quiz_date": str(r["quiz_date"]),
+                    "department": dept,
                     "subject": subj,
                     "created_by": creator,
                     "score": r["score"],
@@ -2290,19 +2293,22 @@ def quiz_review(current_user):
 
         quiz_name = "AI Daily Quiz"
         subject = "Placement Preparation"
+        department = current_user.get("branch") or "AI"
         start_time_str = ""
         end_time_str = ""
 
         if actual_quiz_id:
             topics_table = f"daily_quiz_topics_y{year}"
             cur.execute(
-                f"SELECT topic, subject, created_by, quiz_start_time, quiz_end_time FROM {topics_table} WHERE id=%s",
+                f"SELECT topic, subject, department, created_by, quiz_start_time, quiz_end_time FROM {topics_table} WHERE id=%s",
                 (actual_quiz_id,)
             )
             top_row = cur.fetchone()
             if top_row:
                 quiz_name = top_row["topic"] or top_row["subject"] or f"Quiz #{actual_quiz_id}"
                 subject = top_row["subject"] or top_row["topic"] or "Placement Preparation"
+                if top_row.get("department"):
+                    department = top_row["department"]
                 creator = format_creator_name(top_row.get("created_by"), cur)
                 start_time_str = format_time_to_str(top_row.get("quiz_start_time"))
                 end_time_str = format_time_to_str(top_row.get("quiz_end_time"))
@@ -2353,6 +2359,7 @@ def quiz_review(current_user):
             "quiz_date": str(quiz_date),
             "start_time": start_time_str,
             "end_time": end_time_str,
+            "department": department,
             "subject": subject,
             "created_by": creator,
             "score": attempt["score"],
@@ -3664,7 +3671,7 @@ def admin_login():
             "role": admin["role"],
             "dept_id": admin["dept_id"],
             "faculty_id": admin["faculty_id"],
-            "exp": datetime.utcnow() + timedelta(hours=8)
+            "exp": datetime.utcnow() + timedelta(days=7)
         },
         SECRET_KEY,
         algorithm="HS256"
@@ -3741,7 +3748,7 @@ def verify_admin_login_otp():
             "role": admin["role"],
             "dept_id": admin["dept_id"],
             "faculty_id": admin["faculty_id"],
-            "exp": datetime.utcnow() + timedelta(hours=8)
+            "exp": datetime.utcnow() + timedelta(days=7)
         },
         SECRET_KEY,
         algorithm="HS256"
