@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'admin_session.dart';
+import 'super_admin_generation_analytics_page.dart';
 
 // --- AURUM THEME COLORS ---
 class AurumColors {
@@ -506,6 +507,20 @@ class _AddDailyQuizPageState extends State<AddDailyQuizPage> {
           letterSpacing: 1.0,
         ),
         iconTheme: const IconThemeData(color: AurumColors.accentGold),
+        actions: [
+          if (widget.session.isSuperAdmin)
+            IconButton(
+              icon: const Icon(Icons.analytics_rounded, color: AurumColors.accentGold),
+              tooltip: "Generation Analytics",
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      SuperAdminGenerationAnalyticsPage(session: widget.session),
+                ),
+              ),
+            ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),

@@ -154,7 +154,7 @@ class _AddFacultyQuizPageState extends State<AddFacultyQuizPage> {
 
     if (confirm != true) return;
 
-    setState(() => loading = true);
+    setState(() => processing = true);
     try {
       final res = await http.post(
         Uri.parse("$baseUrl/api/admin/faculty-quiz/send-sample-csv"),
@@ -173,7 +173,7 @@ class _AddFacultyQuizPageState extends State<AddFacultyQuizPage> {
       debugPrint("Sample CSV email error: $e");
       showError("Could not connect to server. Please try again.");
     } finally {
-      if (mounted) setState(() => loading = false);
+      if (mounted) setState(() => processing = false);
     }
   }
 
@@ -446,6 +446,16 @@ class _AddFacultyQuizPageState extends State<AddFacultyQuizPage> {
     }
 
     setState(() => processing = false);
+  }
+
+  void showSuccess(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg, style: const TextStyle(color: Colors.white)),
+        backgroundColor: AurumColors.successGreen,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   void showError(String msg) {

@@ -182,30 +182,48 @@ class _DashboardPageState extends State<DashboardPage> {
                       ),
                     ],
                   ),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: AurumColors.surfaceDark,
-                      borderRadius: BorderRadius.circular(30),
-                      border: Border.all(
-                          color: AurumColors.accentGold.withOpacity(0.3)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.access_time_filled,
-                            color: AurumColors.accentGold, size: 16),
-                        const SizedBox(width: 8),
-                        Text(
-                          formattedTime,
-                          style: const TextStyle(
-                            color: AurumColors.textWhite,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
+                  Row(
+                    children: [
+                      if (widget.session.isSuperAdmin) ...[
+                        IconButton(
+                          tooltip: "AI Quiz Generation Analytics",
+                          icon: const Icon(Icons.analytics_rounded,
+                              color: AurumColors.accentGold, size: 26),
+                          onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) =>
+                                    SuperAdminGenerationAnalyticsPage(session: widget.session)),
                           ),
                         ),
+                        const SizedBox(width: 4),
                       ],
-                    ),
+                      Container(
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: AurumColors.surfaceDark,
+                          borderRadius: BorderRadius.circular(30),
+                          border: Border.all(
+                              color: AurumColors.accentGold.withOpacity(0.3)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.access_time_filled,
+                                color: AurumColors.accentGold, size: 16),
+                            const SizedBox(width: 8),
+                            Text(
+                              formattedTime,
+                              style: const TextStyle(
+                                color: AurumColors.textWhite,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    ],
                   )
                 ],
               ),
@@ -221,19 +239,18 @@ class _DashboardPageState extends State<DashboardPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // WELCOME CARD
+                    // USER PROFILE HEADER
                     Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(25),
+                      padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
                         gradient: AurumColors.goldGradient,
-                        borderRadius: BorderRadius.circular(24),
+                        borderRadius: BorderRadius.circular(20),
                         boxShadow: [
                           BoxShadow(
-                            color: AurumColors.accentGold.withOpacity(0.25),
-                            blurRadius: 20,
-                            offset: const Offset(0, 10),
-                          ),
+                            color: AurumColors.goldStart.withOpacity(0.2),
+                            blurRadius: 15,
+                            offset: const Offset(0, 5),
+                          )
                         ],
                       ),
                       child: Column(
@@ -246,27 +263,37 @@ class _DashboardPageState extends State<DashboardPage> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    "Hello, ${widget.session.name}",
+                                    "Welcome back,",
+                                    style: TextStyle(
+                                      color: Colors.black.withOpacity(0.6),
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    widget.session.name.isNotEmpty
+                                        ? widget.session.name
+                                        : widget.session.email,
                                     style: const TextStyle(
-                                      color: Colors.black87,
-                                      fontSize: 22,
+                                      color: Colors.black,
+                                      fontSize: 20,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    _roleLabel,
+                                    "Role: ${widget.session.role.toUpperCase()}",
                                     style: const TextStyle(
-                                      color: Colors.black54,
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w500,
+                                      color: Colors.black87,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
                                     ),
                                   ),
-                                  if ((widget.session.isHod || widget.session.isFaculty) &&
-                                      widget.session.deptName.isNotEmpty) ...[
+                                  if (widget.session.deptName.isNotEmpty) ...[
                                     const SizedBox(height: 2),
                                     Text(
-                                      widget.session.deptName,
+                                      "Dept: ${widget.session.deptName}",
                                       style: const TextStyle(
                                         color: Colors.black45,
                                         fontSize: 12,
@@ -306,6 +333,25 @@ class _DashboardPageState extends State<DashboardPage> {
                     // =========================
                     // ACTION TILES (Vertical Layout for better detail)
                     // =========================
+
+                    // 0. AI Quiz Generation Analytics (super_admin/admin only)
+                    if (widget.session.isSuperAdmin) ...[
+                      _buildWideActionTile(
+                        title: "Generation Analytics",
+                        subtitle:
+                            "Track sets generated, AI speed & generation duration (Date Wise)",
+                        icon: Icons.analytics_rounded,
+                        colorStart: const Color(0xFFF2D06B),
+                        colorEnd: const Color(0xFFC7930D),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) =>
+                                  SuperAdminGenerationAnalyticsPage(session: widget.session)),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
 
                     // 1. Students Management
                     _buildWideActionTile(
