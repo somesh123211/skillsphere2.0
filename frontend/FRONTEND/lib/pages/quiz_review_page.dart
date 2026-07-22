@@ -172,29 +172,33 @@ class _QuizReviewPageState extends State<QuizReviewPage> {
               ),
               child: pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Text(
-                        "SKILL SPHERE - QUIZ REPORT",
-                        style: pw.TextStyle(
-                          fontSize: 14,
-                          fontWeight: pw.FontWeight.bold,
-                          color: PdfColors.white,
-                          letterSpacing: 1.0,
+                  pw.Expanded(
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text(
+                          "SKILL SPHERE - QUIZ REPORT",
+                          style: pw.TextStyle(
+                            fontSize: 13,
+                            fontWeight: pw.FontWeight.bold,
+                            color: PdfColors.white,
+                            letterSpacing: 1.0,
+                          ),
                         ),
-                      ),
-                      pw.SizedBox(height: 2),
-                      pw.Text(
-                        widget.isFacultyQuiz ? "Faculty Quiz Evaluation" : "AI Daily Quiz Evaluation",
-                        style: const pw.TextStyle(
-                          fontSize: 9,
-                          color: PdfColors.grey400,
+                        pw.SizedBox(height: 2),
+                        pw.Text(
+                          widget.isFacultyQuiz ? "Faculty Quiz Evaluation" : "AI Daily Quiz Evaluation",
+                          style: const pw.TextStyle(
+                            fontSize: 9,
+                            color: PdfColors.grey400,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
+                  pw.SizedBox(width: 8),
                   pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.end,
                     children: [
@@ -267,39 +271,43 @@ class _QuizReviewPageState extends State<QuizReviewPage> {
                 ),
                 child: pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Column(
-                      crossAxisAlignment: pw.CrossAxisAlignment.start,
-                      children: [
-                        pw.Text(
-                          safeStr(quizName),
-                          style: pw.TextStyle(
-                            fontSize: 14,
-                            fontWeight: pw.FontWeight.bold,
-                            color: PdfColor.fromHex('#0F172A'),
+                    pw.Expanded(
+                      child: pw.Column(
+                        crossAxisAlignment: pw.CrossAxisAlignment.start,
+                        children: [
+                          pw.Text(
+                            safeStr(quizName),
+                            style: pw.TextStyle(
+                              fontSize: 13,
+                              fontWeight: pw.FontWeight.bold,
+                              color: PdfColor.fromHex('#0F172A'),
+                            ),
                           ),
-                        ),
-                        pw.SizedBox(height: 3),
-                        pw.Text(
-                          "Department: ${safeStr(resolveDepartmentName(quizDepartment))}  |  Subject: ${safeStr(quizSubject)}",
-                          style: pw.TextStyle(
-                            fontSize: 10,
-                            fontWeight: pw.FontWeight.bold,
-                            color: PdfColor.fromHex('#2563EB'),
+                          pw.SizedBox(height: 4),
+                          pw.Text(
+                            "Department: ${safeStr(resolveDepartmentName(quizDepartment))}  |  Subject: ${safeStr(quizSubject)}",
+                            style: pw.TextStyle(
+                              fontSize: 9,
+                              fontWeight: pw.FontWeight.bold,
+                              color: PdfColor.fromHex('#2563EB'),
+                            ),
                           ),
-                        ),
-                        pw.SizedBox(height: 4),
-                        pw.Text(
-                          "Total Questions: $total  |  Correct: $score  |  Accuracy: ${percentage.toStringAsFixed(0)}%",
-                          style: const pw.TextStyle(
-                            fontSize: 10,
-                            color: PdfColors.grey700,
+                          pw.SizedBox(height: 4),
+                          pw.Text(
+                            "Total Questions: $total  |  Correct: $score  |  Accuracy: ${percentage.toStringAsFixed(0)}%",
+                            style: const pw.TextStyle(
+                              fontSize: 9,
+                              color: PdfColors.grey700,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
+                    pw.SizedBox(width: 10),
                     pw.Container(
-                      padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                       decoration: pw.BoxDecoration(
                         color: score > (total / 2) ? PdfColor.fromHex('#DCFCE7') : PdfColor.fromHex('#FEE2E2'),
                         borderRadius: pw.BorderRadius.circular(20),
@@ -310,7 +318,7 @@ class _QuizReviewPageState extends State<QuizReviewPage> {
                       child: pw.Text(
                         "SCORE: $score / $total",
                         style: pw.TextStyle(
-                          fontSize: 12,
+                          fontSize: 11,
                           fontWeight: pw.FontWeight.bold,
                           color: score > (total / 2) ? PdfColor.fromHex('#166534') : PdfColor.fromHex('#991B1B'),
                         ),

@@ -494,33 +494,37 @@ class _DailyQuizFullClassPageState extends State<DailyQuizFullClassPage> {
               ),
               child: pw.Row(
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
-                  pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      if (subject.isNotEmpty || quizDepartment.isNotEmpty) ...[
-                        pw.Text("Department: ${safeStr(resolveDepartmentName(subject.isNotEmpty ? subject : quizDepartment))}", style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold, color: PdfColor.fromHex('#0F172A'))),
+                  pw.Expanded(
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        if (subject.isNotEmpty || quizDepartment.isNotEmpty) ...[
+                          pw.Text("Department: ${safeStr(resolveDepartmentName(subject.isNotEmpty ? subject : quizDepartment))}", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColor.fromHex('#0F172A'))),
+                          pw.SizedBox(height: 3),
+                        ],
+                        pw.Text("Topic: ${safeStr(topic)}", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColor.fromHex('#2563EB'))),
                         pw.SizedBox(height: 3),
-                      ],
-                      pw.Text("Topic: ${safeStr(topic)}", style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold, color: PdfColor.fromHex('#2563EB'))),
-                      pw.SizedBox(height: 3),
-                      pw.Text("Date: $quizDateStr", style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
-                      if (quizStartTime.isNotEmpty || quizEndTime.isNotEmpty) ...[
+                        pw.Text("Date: $quizDateStr", style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                        if (quizStartTime.isNotEmpty || quizEndTime.isNotEmpty) ...[
+                          pw.SizedBox(height: 3),
+                          pw.Text("Timings: ${safeStr(quizStartTime.isNotEmpty ? quizStartTime : '--')} - ${safeStr(quizEndTime.isNotEmpty ? quizEndTime : '--')} ($durationMinutes mins)", style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                        ],
                         pw.SizedBox(height: 3),
-                        pw.Text("Timings: ${safeStr(quizStartTime.isNotEmpty ? quizStartTime : '--')} - ${safeStr(quizEndTime.isNotEmpty ? quizEndTime : '--')} ($durationMinutes mins)", style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                        pw.Text("Difficulty: ${safeStr(difficulty)}", style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                        if (createdByName.isNotEmpty) ...[
+                          pw.SizedBox(height: 3),
+                          pw.Text("Organised by: ${safeStr(createdByName)}", style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                        ],
+                        if (quizDepartment.isNotEmpty) ...[
+                          pw.SizedBox(height: 3),
+                          pw.Text("Department: ${safeStr(quizDepartment)}", style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+                        ],
                       ],
-                      pw.SizedBox(height: 3),
-                      pw.Text("Difficulty: ${safeStr(difficulty)}", style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
-                      if (createdByName.isNotEmpty) ...[
-                        pw.SizedBox(height: 3),
-                        pw.Text("Organised by: ${safeStr(createdByName)}", style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
-                      ],
-                      if (quizDepartment.isNotEmpty) ...[
-                        pw.SizedBox(height: 3),
-                        pw.Text("Department: ${safeStr(quizDepartment)}", style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
-                      ],
-                    ],
+                    ),
                   ),
+                  pw.SizedBox(width: 10),
                   pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.end,
                     children: [
