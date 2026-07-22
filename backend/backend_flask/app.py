@@ -1262,9 +1262,10 @@ def get_daily_quiz(year, quiz_type, uid, quiz_id=None):
         # Duration is looked up once, up front, so both the resume and
         # fresh-start branches below can compute remaining_seconds without
         # a second topic-table round trip.
-        cur.execute(f"SELECT duration_minutes FROM {topic_table} WHERE id=%s", (quiz_id,))
-        duration_row = cur.fetchone()
-        duration_minutes = (duration_row or {}).get("duration_minutes") or 10
+        cur.execute(f"SELECT duration_minutes, question_per_set FROM {topic_table} WHERE id=%s", (quiz_id,))
+        duration_row = cur.fetchone() or {}
+        duration_minutes = duration_row.get("duration_minutes") or 10
+        questions_per_set = duration_row.get("question_per_set") or 10
 
         # Check attempt status using both quiz_id and quiz_date
         try:
@@ -1520,7 +1521,9 @@ def get_daily_quiz(year, quiz_type, uid, quiz_id=None):
                 """, (quiz_id,))
                 questions = cur.fetchall()
 
-            conn.begin()
+            # 🔒 STICK TO EXACT question_per_set COUNT
+            if questions and len(questions) > questions_per_set:
+                questions = questions[:questions_per_set]
             frontend_questions = []
             for q in questions:
                 opts = [q["option_a"], q["option_b"], q["option_c"], q["option_d"]]
