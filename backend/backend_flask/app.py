@@ -618,7 +618,7 @@ def get_student_profile(current_user):
             }), 404
 
         profile_image = student["profile_image"]
-        if profile_image and not profile_image.startswith("http"):
+        if profile_image and not profile_image.startswith("http") and not profile_image.startswith("data:"):
             profile_image = request.host_url.rstrip("/") + "/" + profile_image
 
         return jsonify({
@@ -663,28 +663,38 @@ def upload_profile_image(current_user):
         return jsonify({"error": "Image missing"}), 400
 
     # 🔒 Remove base64 header if present
-    if "," in image_base64:
-        image_base64 = image_base64.split(",")[1]
+    raw_base64 = image_base64
+    if "," in raw_base64:
+        raw_base64 = raw_base64.split(",")[1]
 
     # 🔒 Basic size protection (≈5 MB base64)
-    if len(image_base64) > 7_000_000:
+    if len(raw_base64) > 7_000_000:
         return jsonify({"error": "Image too large"}), 413
+
+    image_url = None
+
+    # 🔥 Try Cloudinary Upload
+    try:
+        if os.getenv("CLOUDINARY_CLOUD_NAME") and os.getenv("CLOUDINARY_API_KEY"):
+            result = cloudinary.uploader.upload(
+                base64.b64decode(raw_base64),
+                folder="skillsphere/profile_images",
+                public_id=str(current_user["uid"]),  # overwrite same user image
+                overwrite=True,
+                resource_type="image"
+            )
+            image_url = result.get("secure_url")
+    except Exception as e:
+        print("CLOUDINARY UPLOAD NOTICE:", repr(e))
+
+    # 🔥 Fallback to data URI if Cloudinary upload fails or is not configured
+    if not image_url:
+        image_url = f"data:image/jpeg;base64,{raw_base64}"
 
     conn = None
     cur = None
     try:
-        # 🔥 Upload to Cloudinary (no local file)
-        result = cloudinary.uploader.upload(
-            base64.b64decode(image_base64),
-            folder="skillsphere/profile_images",
-            public_id=str(current_user["uid"]),  # overwrite same user image
-            overwrite=True,
-            resource_type="image"
-        )
-
-        image_url = result["secure_url"]
-
-        # 🔥 Save Cloudinary URL in DB
+        # 🔥 Save profile image URL in DB
         conn = get_db()
         cur = conn.cursor()
 

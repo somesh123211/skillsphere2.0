@@ -110,10 +110,10 @@ class _StudentDashboardState extends State<StudentDashboard>
       setState(() {
         name = p['name'] ?? "";
         branch = p['branch'] ?? "";
-        final img = p['profile_image'];
+        final img = p['profile_image']?.toString();
 
-        if (img != null && img.toString().startsWith("http")) {
-          profileImageUrl = "$img?t=${DateTime.now().millisecondsSinceEpoch}";
+        if (img != null && (img.startsWith("http") || img.startsWith("data:"))) {
+          profileImageUrl = img.startsWith("http") ? "$img?t=${DateTime.now().millisecondsSinceEpoch}" : img;
         } else {
           profileImageUrl = null;
         }
@@ -123,6 +123,23 @@ class _StudentDashboardState extends State<StudentDashboard>
     } catch (_) {
       setState(() => loadingProfile = false);
     }
+  }
+
+  ImageProvider? _getProfileImageProvider(String? url) {
+    if (url == null || url.trim().isEmpty) return null;
+    final str = url.trim();
+    if (str.startsWith("data:image/")) {
+      try {
+        final parts = str.split(",");
+        if (parts.length > 1) {
+          return MemoryImage(base64Decode(parts[1]));
+        }
+      } catch (_) {}
+    }
+    if (str.startsWith("http")) {
+      return NetworkImage(str);
+    }
+    return null;
   }
 
   // --- API CALL 2: TODAY QUIZ STATUS ---
@@ -358,11 +375,9 @@ class _StudentDashboardState extends State<StudentDashboard>
             ),
             child: CircleAvatar(
               radius: 35,
-              backgroundImage: profileImageUrl != null
-                  ? NetworkImage(profileImageUrl!)
-                  : null,
+              backgroundImage: _getProfileImageProvider(profileImageUrl),
               backgroundColor: Colors.grey[900],
-              child: profileImageUrl == null
+              child: _getProfileImageProvider(profileImageUrl) == null
                   ? const Icon(Icons.person, size: 35, color: Colors.white)
                   : null,
             ),

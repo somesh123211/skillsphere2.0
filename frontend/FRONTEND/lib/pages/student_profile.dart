@@ -84,10 +84,10 @@ class _StudentProfilePageState extends State<StudentProfilePage>
         profile = response.data['profile'];
 
         // Add timestamp to prevent caching
-        final img = profile!['profile_image'];
+        final img = profile!['profile_image']?.toString();
 
-        if (img != null && img.toString().startsWith("http")) {
-          profileImageUrl = "$img?t=${DateTime.now().millisecondsSinceEpoch}";
+        if (img != null && (img.startsWith("http") || img.startsWith("data:"))) {
+          profileImageUrl = img.startsWith("http") ? "$img?t=${DateTime.now().millisecondsSinceEpoch}" : img;
         } else {
           profileImageUrl = null;
         }
@@ -100,6 +100,23 @@ class _StudentProfilePageState extends State<StudentProfilePage>
     } catch (e) {
       if (mounted) setState(() => isLoading = false);
     }
+  }
+
+  ImageProvider? _getProfileImageProvider(String? url) {
+    if (url == null || url.trim().isEmpty) return null;
+    final str = url.trim();
+    if (str.startsWith("data:image/")) {
+      try {
+        final parts = str.split(",");
+        if (parts.length > 1) {
+          return MemoryImage(base64Decode(parts[1]));
+        }
+      } catch (_) {}
+    }
+    if (str.startsWith("http")) {
+      return NetworkImage(str);
+    }
+    return null;
   }
 
   // ---------------- DAILY QUIZ ----------------
@@ -354,15 +371,14 @@ class _StudentProfilePageState extends State<StudentProfilePage>
                       blurRadius: 30,
                       spreadRadius: 5)
                 ],
-                image: (profileImageUrl != null &&
-                        profileImageUrl!.startsWith("http"))
+                image: _getProfileImageProvider(profileImageUrl) != null
                     ? DecorationImage(
-                        image: NetworkImage(profileImageUrl!),
+                        image: _getProfileImageProvider(profileImageUrl)!,
                         fit: BoxFit.cover,
                       )
                     : null,
               ),
-              child: profileImageUrl == null
+              child: _getProfileImageProvider(profileImageUrl) == null
                   ? Icon(Icons.person,
                       size: 60, color: Colors.white.withOpacity(0.8))
                   : null,
