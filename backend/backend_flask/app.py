@@ -4913,11 +4913,11 @@ def insert_daily_quiz_topic(admin):
             cur.execute(f"UPDATE {table} SET status = 'QUEUED' WHERE id = %s", (quiz_id,))
             conn.commit()
 
-        # Spawn background worker thread (worker acquires generation_lock internally)
+        full_topic_scope = f"Subject: {subject} | Topic: {topic}" if subject and subject.strip().lower() not in topic.strip().lower() else topic
         import threading
         t = threading.Thread(
             target=run_daily_quiz_worker,
-            args=(year, quiz_date, topic, difficulty, questions_per_student, quiz_id)
+            args=(year, quiz_date, full_topic_scope, difficulty, questions_per_student, quiz_id)
         )
         t.daemon = True
         t.start()
@@ -5084,31 +5084,25 @@ def build_daily_mcq_prompt(topics, difficulty, set_number, num_questions):
     set_nuance = nuance_list[set_number % len(nuance_list)]
     
     return f"""
-Act as an elite AI placement MCQ generator for engineering students.
+Act as an elite professor and expert MCQ generator.
 
-Generate exactly {num_questions} multiple choice questions.
-
-Topics strictly limited to:
+Generate exactly {num_questions} multiple choice questions strictly based on:
 {topics}
 
 Target Difficulty Level: {set_difficulty.upper()}
 
-Unique seed code to prevent duplicates: set-{set_number}-{rand_seed}
+CRITICAL TOPIC MANDATE:
+1. Every single question MUST be strictly, 100% directly focused on: {topics}.
+2. Do NOT generate questions on unrelated topics, general computer science, general math, or generic programming.
+3. Every question, option, and correct answer MUST directly test concepts, formulas, applications, algorithms, or types relevant to: {topics}.
 
-To ensure high diversity and uniqueness across sets, the questions in this set (set {set_number}) must be designed as: {set_nuance}.
+Unique seed code to prevent duplicates: set-{set_number}-{rand_seed}
+Set style: {set_nuance}.
 
 Rules:
-- One correct option only
-- Options must be stored in option_a, option_b, option_c, option_d (without A or B prefixes)
-- Correct answer must be A, B, C, or D
-- No explanations
-- Questions must strictly match the difficulty level:
-  * BASIC: Extremely simple, direct definition and elementary recall questions suitable for absolute beginners.
-  * EASY: Fundamental conceptual questions requiring basic understanding.
-  * MEDIUM: Standard placement level conceptual and application questions.
-  * HARD: Tricky, analytical, and advanced placement-style questions.
-  * VERY HARD: Expert-level complex scenarios, trap-based edge cases, and industry problems.
-- Avoid repetition or cliché questions; make them fresh and accurate.
+- One correct option only (answer must be A, B, C, or D)
+- Options stored in option_a, option_b, option_c, option_d without A/B/C/D prefixes
+- No explanations or markdown commentary outside the JSON array
 - Output STRICT JSON ONLY
 
 Format:
