@@ -5400,11 +5400,11 @@ def run_daily_quiz_worker(year, quiz_date, topics, difficulty, num_questions, qu
         except Exception as e:
             print(f"[Daily Worker] Failed to update status to GENERATING: {e}")
 
-        print(f"[Daily Worker] Starting background generation with 10 threads for Year {year} Date {quiz_date} Quiz ID {quiz_id}...")
+        print(f"[Daily Worker] Starting background generation with 30 threads for Year {year} Date {quiz_date} Quiz ID {quiz_id}...")
         time.sleep(1)
         
         threads = []
-        for i in range(10):
+        for i in range(30):
             t = threading.Thread(
                 target=thread_worker_func,
                 args=(year, quiz_date, topics, difficulty, num_questions, quiz_id)
@@ -5416,7 +5416,7 @@ def run_daily_quiz_worker(year, quiz_date, topics, difficulty, num_questions, qu
         for t in threads:
             t.join()
             
-        print(f"[Daily Worker] All 10 threads finished for Year {year} Date {quiz_date} Quiz ID {quiz_id}.")
+        print(f"[Daily Worker] All 30 threads finished for Year {year} Date {quiz_date} Quiz ID {quiz_id}.")
             
     try:
         conn = get_db()
