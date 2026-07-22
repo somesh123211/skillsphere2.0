@@ -1229,12 +1229,18 @@ def get_daily_quiz(year, quiz_type, uid, quiz_id=None):
         cur = conn.cursor(pymysql.cursors.DictCursor)
 
         if not quiz_id:
-            # Query the first quiz id of today
+            branch = current_user.get("branch", "")
             cur.execute(
-                f"SELECT id FROM {topic_table} WHERE quiz_date=%s AND quiz_type=%s LIMIT 1",
-                (today, quiz_type)
+                f"SELECT id FROM {topic_table} WHERE quiz_date=%s AND quiz_type=%s AND (department=%s OR department='ALL' OR department IS NULL OR department='') ORDER BY id DESC LIMIT 1",
+                (today, quiz_type, branch)
             )
             row = cur.fetchone()
+            if not row:
+                cur.execute(
+                    f"SELECT id FROM {topic_table} WHERE quiz_date=%s AND quiz_type=%s ORDER BY id DESC LIMIT 1",
+                    (today, quiz_type)
+                )
+                row = cur.fetchone()
             if not row:
                 cur.close()
                 conn.close()
@@ -2574,7 +2580,7 @@ def today_quiz_status(current_user):
         # Fetch daily topic details for today, filtered by student's department
         branch = current_user.get("branch", "")
         cur.execute(
-            f"SELECT id, title, subject, topic, difficulty, quiz_start_time, quiz_end_time, status, department FROM {topic_table} WHERE quiz_date=%s AND quiz_type='placement' AND department=%s",
+            f"SELECT id, title, subject, topic, difficulty, quiz_start_time, quiz_end_time, status, department FROM {topic_table} WHERE quiz_date=%s AND quiz_type='placement' AND (department=%s OR department='ALL' OR department IS NULL OR department='')",
             (today, branch)
         )
         topic_rows = cur.fetchall()

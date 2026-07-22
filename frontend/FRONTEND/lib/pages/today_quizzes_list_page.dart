@@ -257,7 +257,7 @@ class _TodayQuizzesListPageState extends State<TodayQuizzesListPage> {
                                                   color: Colors.white60,
                                                   fontSize: 11,
                                                 ),
-                                              ),,
+                                              ),
                                               const SizedBox(height: 4),
                                               if (isFaculty) ...[
                                                 Text(
