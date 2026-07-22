@@ -34,9 +34,18 @@ pool = PooledDB(
     autocommit=True
 )
 
+import time
+
 def get_db():
     """
-    Returns a pooled database connection.
+    Returns a pooled database connection with automatic 5-attempt retry loop.
     Calling .close() will RETURN the connection to the pool.
     """
-    return pool.connection()
+    last_err = None
+    for attempt in range(5):
+        try:
+            return pool.connection()
+        except Exception as e:
+            last_err = e
+            time.sleep(0.15)
+    raise last_err
