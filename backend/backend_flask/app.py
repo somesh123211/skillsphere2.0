@@ -6240,7 +6240,128 @@ def validate_faculty_quiz_csv_route(admin):
     if errors:
         return jsonify({"success": False, "error": "CSV validation failed", "details": errors}), 400
 
-    return jsonify({"success": True, "total_questions": len(rows)}), 200
+def send_sample_csv_email(recipient_email, recipient_name="Faculty"):
+    sample_csv_content = """question,option_a,option_b,option_c,option_d,correct_option
+"Which of the following is the primary goal of Software Engineering?","To write code as quickly as possible","To produce reliable and efficient software systematically","To eliminate all bugs permanently","To reduce hardware expenses","B"
+"In the layered technology of software engineering, which layer defines the framework for process key areas?","Tools","Methods","Process","Quality Focus","C"
+"Which process model is also known as the Classic Life Cycle?","Agile Model","Spiral Model","Waterfall Model","RAD Model","C"
+"What does SRS stand for in Software Engineering?","System Requirement Specification","Software Requirements Specification","Software Response System","System Design Specification","B"
+"Which testing level focuses on testing individual modules or components?","System Testing","Unit Testing","Integration Testing","Acceptance Testing","B"
+"""
+    csv_bytes = sample_csv_content.encode("utf-8")
+    b64_content = base64.b64encode(csv_bytes).decode("utf-8")
+
+    BREVO_API_KEY = os.getenv("ADMIN_KEY")
+    subject = "Skill Sphere — Sample Faculty Quiz CSV Template"
+    html_content = f"""
+        <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+            <h2 style="color: #1E293B;">Skill Sphere — Faculty Quiz Sample CSV Template</h2>
+            <p>Dear {recipient_name},</p>
+            <p>As requested, we have attached the official <strong>Sample Faculty Quiz CSV Template</strong> (<code>sample_quiz_template.csv</code>) to this email.</p>
+            <p><strong>Instructions for Uploading Custom Questions:</strong></p>
+            <ul>
+                <li>Ensure all 6 column headers are present: <code>question</code>, <code>option_a</code>, <code>option_b</code>, <code>option_c</code>, <code>option_d</code>, <code>correct_option</code>.</li>
+                <li>The <code>correct_option</code> column must contain a single uppercase letter: <strong>A</strong>, <strong>B</strong>, <strong>C</strong>, or <strong>D</strong>.</li>
+                <li>Save your file as <code>.csv</code> format before uploading on the Skill Sphere Admin Portal.</li>
+            </ul>
+            <p>Best regards,<br><strong>Skill Sphere Team</strong></p>
+        </div>
+    """
+
+    if BREVO_API_KEY:
+        url = "https://api.brevo.com/v3/smtp/email"
+        headers = {
+            "accept": "application/json",
+            "api-key": BREVO_API_KEY,
+            "content-type": "application/json",
+        }
+        payload = {
+            "sender": {
+                "name": "Skill Sphere Admin",
+                "email": "techpallotine@gmail.com"
+            },
+            "to": [{"email": recipient_email}],
+            "subject": subject,
+            "htmlContent": html_content,
+            "attachment": [
+                {
+                    "content": b64_content,
+                    "name": "sample_quiz_template.csv"
+                }
+            ]
+        }
+        try:
+            res = requests.post(url, json=payload, headers=headers, timeout=10)
+            if res.status_code in (200, 201):
+                return True
+            print(f"[Brevo Email Attachment] Error status: {res.status_code}, response: {res.text}")
+        except Exception as e:
+            print(f"[Brevo Email Attachment] Exception: {e}")
+
+    try:
+        msg = MIMEMultipart()
+        msg["From"] = FROM_EMAIL
+        msg["To"] = recipient_email
+        msg["Subject"] = subject
+        msg.attach(MIMEText(html_content, "html"))
+
+        part = MIMEApplication(csv_bytes, Name="sample_quiz_template.csv")
+        part['Content-Disposition'] = 'attachment; filename="sample_quiz_template.csv"'
+        msg.attach(part)
+
+        context = ssl.create_default_context()
+        with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, context=context, timeout=10) as server:
+            server.login(SMTP_USER, SMTP_PASS)
+            server.sendmail(FROM_EMAIL, recipient_email, msg.as_string())
+        return True
+    except Exception as ex:
+        print(f"[SMTP Fallback Attachment] Exception: {ex}")
+        return False
+
+
+@app.route("/api/admin/faculty-quiz/send-sample-csv", methods=["POST", "OPTIONS"])
+@admin_token_required
+@role_required("super_admin", "admin", "hod", "faculty")
+def send_sample_csv_email_route(admin):
+    if request.method == "OPTIONS":
+        return jsonify({"success": True}), 200
+
+    recipient_email = admin.get("email")
+    recipient_name = admin.get("name", "Faculty")
+
+    if not recipient_email:
+        return jsonify({"success": False, "message": "Admin email not found"}), 400
+
+    sent = send_sample_csv_email(recipient_email, recipient_name)
+    if sent:
+        return jsonify({
+            "success": True,
+            "message": f"Sample CSV template has been sent to your registered email ({recipient_email})."
+        }), 200
+    else:
+        return jsonify({
+            "success": False,
+            "message": "Failed to send email. Please try again later."
+        }), 500
+
+
+@app.route("/api/admin/faculty-quiz/sample-csv", methods=["GET", "OPTIONS"])
+def download_sample_csv_route():
+    if request.method == "OPTIONS":
+        return jsonify({"success": True}), 200
+
+    sample_csv_content = """question,option_a,option_b,option_c,option_d,correct_option
+"Which of the following is the primary goal of Software Engineering?","To write code as quickly as possible","To produce reliable and efficient software systematically","To eliminate all bugs permanently","To reduce hardware expenses","B"
+"In the layered technology of software engineering, which layer defines the framework for process key areas?","Tools","Methods","Process","Quality Focus","C"
+"Which process model is also known as the Classic Life Cycle?","Agile Model","Spiral Model","Waterfall Model","RAD Model","C"
+"What does SRS stand for in Software Engineering?","System Requirement Specification","Software Requirements Specification","Software Response System","System Design Specification","B"
+"Which testing level focuses on testing individual modules or components?","System Testing","Unit Testing","Integration Testing","Acceptance Testing","B"
+"""
+    return Response(
+        sample_csv_content,
+        mimetype="text/csv",
+        headers={"Content-disposition": "attachment; filename=sample_quiz_template.csv"}
+    )
 
 
 @app.route("/api/admin/faculty-quiz/create", methods=["POST", "OPTIONS"])

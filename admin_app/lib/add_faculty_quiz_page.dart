@@ -113,23 +113,67 @@ class _AddFacultyQuizPageState extends State<AddFacultyQuizPage> {
   }
 
   // =========================
-  // SAMPLE CSV DOWNLOAD
+  // SAMPLE CSV EMAIL REQUEST
   // =========================
-  // The endpoint is public (a generic template, no real quiz data), so it
-  // can just be handed to the OS/browser directly - works the same on web
-  // (opens/downloads in a new tab), Android and iOS (opens in the browser,
-  // which downloads it), unlike the old dart:html Blob approach which only
-  // existed on web and broke native builds outright.
-  Future<void> downloadSampleCsv() async {
-    final uri = Uri.parse("$baseUrl/api/admin/faculty-quiz/sample-csv");
+  Future<void> requestSampleCsvEmail() async {
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AurumColors.surfaceDark,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.email_outlined, color: AurumColors.accentGold),
+              SizedBox(width: 10),
+              Text("Request Sample CSV", style: TextStyle(color: AurumColors.textWhite, fontSize: 18, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: Text(
+            "Do you want the Sample CSV template sent to your registered email address (${widget.session.email})?",
+            style: const TextStyle(color: AurumColors.textWhite, fontSize: 14),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text("No", style: TextStyle(color: AurumColors.textGrey, fontSize: 14)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AurumColors.accentGold,
+                foregroundColor: Colors.black,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text("Yes, Send Email", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm != true) return;
+
+    setState(() => loading = true);
     try {
-      final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
-      if (!launched) {
-        showError("Could not download sample CSV");
+      final res = await http.post(
+        Uri.parse("$baseUrl/api/admin/faculty-quiz/send-sample-csv"),
+        headers: {
+          "Authorization": "Bearer ${widget.session.token}",
+          "Content-Type": "application/json"
+        },
+      );
+      final data = jsonDecode(res.body);
+      if (data["success"] == true) {
+        showSuccess(data["message"] ?? "Sample CSV template has been sent to your registered email.");
+      } else {
+        showError(data["message"] ?? "Failed to send email. Please try again.");
       }
     } catch (e) {
-      debugPrint("Sample CSV download error: $e");
-      showError("Could not download sample CSV. Please try again.");
+      debugPrint("Sample CSV email error: $e");
+      showError("Could not connect to server. Please try again.");
+    } finally {
+      if (mounted) setState(() => loading = false);
     }
   }
 
@@ -605,13 +649,21 @@ class _AddFacultyQuizPageState extends State<AddFacultyQuizPage> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _buildSectionHeader("Step 3", "Upload Questions (CSV)"),
-                TextButton.icon(
-                  onPressed: downloadSampleCsv,
-                  icon: const Icon(Icons.download_outlined,
-                      color: AurumColors.accentGold, size: 18),
+                Expanded(
+                  child: _buildSectionHeader("Step 3", "Upload Questions (CSV)"),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: AurumColors.accentGold, width: 1.2),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: requestSampleCsvEmail,
+                  icon: const Icon(Icons.email_outlined,
+                      color: AurumColors.accentGold, size: 16),
                   label: const Text("Sample CSV",
-                      style: TextStyle(color: AurumColors.accentGold)),
+                      style: TextStyle(color: AurumColors.accentGold, fontSize: 12, fontWeight: FontWeight.bold)),
                 ),
               ],
             ),
