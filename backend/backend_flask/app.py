@@ -5871,31 +5871,6 @@ def build_and_send_faculty_quiz_report(quiz_id):
         creator_row = cur.fetchone()
         quiz["created_by_name"] = creator_row["name"] if creator_row else creator_email
 
-        cur.execute(
-            """
-            SELECT id, question, option_a, option_b, option_c, option_d, correct_option
-            FROM faculty_quiz_questions_new
-            WHERE quiz_id = %s
-            ORDER BY id
-            """,
-            (quiz_id,)
-        )
-        rows = cur.fetchall()
-        if not rows:
-            cur.execute("UPDATE faculty_quiz_master SET csv_sent=1 WHERE quiz_id=%s", (quiz_id,))
-            conn.commit()
-            return
-
-        buf = io.StringIO()
-        writer = csv.writer(buf)
-        writer.writerow(["Question Number", "Question", "Option A", "Option B", "Option C", "Option D", "Correct Option"])
-        for idx, r in enumerate(rows, start=1):
-            writer.writerow([
-                idx, r["question"], r["option_a"], r["option_b"],
-                r["option_c"], r["option_d"], r["correct_option"]
-            ])
-        questions_csv_bytes = buf.getvalue().encode("utf-8")
-
         year = quiz.get("year") or 1
         quiz_dept = quiz.get("department") or ""
         quiz_dept_id = BRANCH_TO_DEPT_ID.get(quiz_dept)
@@ -5927,25 +5902,25 @@ def build_and_send_faculty_quiz_report(quiz_id):
             <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
                 <h2 style="color: #1E293B;">Skill Sphere — Faculty Quiz Evaluation Report</h2>
                 <p>Dear {quiz['created_by_name']},</p>
-                <p>The evaluation period for your faculty quiz has completed. Attached are the official test evaluation reports:</p>
+                <p>The evaluation period for your faculty quiz has completed. Attached is the official student performance report PDF:</p>
                 <p><strong>Quiz Name:</strong> {quiz['quiz_name']}<br>
                 <strong>Academic Year:</strong> Year {year}<br>
                 <strong>Department:</strong> {quiz_dept}<br>
                 <strong>Date:</strong> {quiz['quiz_date']}<br>
                 <strong>Timings:</strong> {quiz['quiz_start_time']} - {quiz['quiz_end_time']} ({quiz.get('duration_minutes', 10)} mins duration)</p>
                 <ul>
-                    <li><strong>faculty_quiz_{quiz_id}_questions.csv</strong> — Question paper & answer key.</li>
-                    {"<li><strong>faculty_quiz_" + str(quiz_id) + "_marks.pdf</strong> — Student performance roster for your department.</li>" if marks_pdf_bytes else ""}
+                    {"<li><strong>faculty_quiz_" + str(quiz_id) + "_marks.pdf</strong> — Full class student performance roster and marks summary.</li>" if marks_pdf_bytes else "<li>No student attempts submitted.</li>"}
                 </ul>
                 <p>Best regards,<br><strong>Skill Sphere Automation Engine</strong></p>
             </div>
         """
 
-        attachments = [(questions_csv_bytes, f"faculty_quiz_{quiz_id}_questions.csv")]
+        attachments = []
         if marks_pdf_bytes:
             attachments.append((marks_pdf_bytes, f"faculty_quiz_{quiz_id}_marks.pdf"))
 
-        send_email_with_attachments(creator_email, subject, html_body, attachments)
+        if attachments:
+            send_email_with_attachments(creator_email, subject, html_body, attachments)
 
         cur.execute("UPDATE faculty_quiz_master SET csv_sent=1 WHERE quiz_id=%s", (quiz_id,))
         conn.commit()
