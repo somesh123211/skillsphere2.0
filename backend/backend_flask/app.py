@@ -1257,11 +1257,23 @@ def get_daily_quiz(year, quiz_type, uid, quiz_id=None):
         duration_minutes = (duration_row or {}).get("duration_minutes") or 10
 
         # Check attempt status using both quiz_id and quiz_date
-        cur.execute(
-            f"SELECT status, started_at FROM {attempts_table} WHERE uid=%s AND quiz_date=%s AND quiz_id=%s",
-            (uid, today, quiz_id)
-        )
-        existing_attempt = cur.fetchone()
+        try:
+            cur.execute(
+                f"SELECT status, started_at FROM {attempts_table} WHERE uid=%s AND quiz_date=%s AND quiz_id=%s",
+                (uid, today, quiz_id)
+            )
+            existing_attempt = cur.fetchone()
+        except Exception:
+            try:
+                cur.execute(f"ALTER TABLE {attempts_table} ADD COLUMN started_at DATETIME NULL DEFAULT CURRENT_TIMESTAMP")
+                conn.commit()
+            except Exception:
+                pass
+            cur.execute(
+                f"SELECT status, started_at FROM {attempts_table} WHERE uid=%s AND quiz_date=%s AND quiz_id=%s",
+                (uid, today, quiz_id)
+            )
+            existing_attempt = cur.fetchone()
 
         if existing_attempt:
             if existing_attempt["status"] != "started":
@@ -1462,14 +1474,24 @@ def get_daily_quiz(year, quiz_type, uid, quiz_id=None):
                 VALUES (%s, %s, %s, %s, %s)
             """, (uid, year, today, quiz_id, allocated_set))
 
-            cur.execute(
-                f"""
-                INSERT INTO {attempts_table}
-                (uid, quiz_date, quiz_id, status, score, total, time_taken_seconds, started_at)
-                VALUES (%s, %s, %s, 'started', 0, 0, 0, NOW())
-                """,
-                (uid, today, quiz_id)
-            )
+            try:
+                cur.execute(
+                    f"""
+                    INSERT INTO {attempts_table}
+                    (uid, quiz_date, quiz_id, status, score, total, time_taken_seconds, started_at)
+                    VALUES (%s, %s, %s, 'started', 0, 0, 0, NOW())
+                    """,
+                    (uid, today, quiz_id)
+                )
+            except Exception:
+                cur.execute(
+                    f"""
+                    INSERT INTO {attempts_table}
+                    (uid, quiz_date, quiz_id, status, score, total, time_taken_seconds)
+                    VALUES (%s, %s, %s, 'started', 0, 0, 0)
+                    """,
+                    (uid, today, quiz_id)
+                )
             conn.commit()
 
             cur.execute("""
