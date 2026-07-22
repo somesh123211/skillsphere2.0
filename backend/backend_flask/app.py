@@ -5149,9 +5149,9 @@ def generate_daily_set_mcqs(year, quiz_date, set_number, topics, difficulty, num
                 try:
                     decoder = json.JSONDecoder()
                     parsed, end = decoder.raw_decode(raw[idx:])
-                    if isinstance(parsed, list) and len(parsed) == num_questions:
+                    if isinstance(parsed, list) and len(parsed) >= min(5, num_questions):
                         if all(all(k in q for k in ["question", "option_a", "option_b", "option_c", "option_d", "answer"]) for q in parsed):
-                            questions = parsed
+                            questions = parsed[:num_questions]
                             break
                 except (json.JSONDecodeError, ValueError):
                     pass
@@ -5161,12 +5161,12 @@ def generate_daily_set_mcqs(year, quiz_date, set_number, topics, difficulty, num
                 text = re.sub(r"```json|```", "", raw.strip())
                 try:
                     parsed = json.loads(text)
-                    if isinstance(parsed, list) and len(parsed) == num_questions:
-                        questions = parsed
+                    if isinstance(parsed, list) and len(parsed) >= min(5, num_questions):
+                        questions = parsed[:num_questions]
                 except:
                     pass
                     
-            if not questions or len(questions) != num_questions:
+            if not questions or len(questions) < min(5, num_questions):
                 raise Exception(f"Invalid AI format response (parsed {len(questions) if questions else 0} questions)")
                 
             valid_questions = []
