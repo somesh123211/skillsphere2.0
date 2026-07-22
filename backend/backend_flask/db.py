@@ -16,7 +16,7 @@ from dbutils.pooled_db import PooledDB
 # ------------------------------------------------------------------
 pool = PooledDB(
     creator=pymysql,
-    maxconnections=25,      # Max total connections
+    maxconnections=10,      # Strict cap matching site4now MySQL max_user_connections (10)
     mincached=1,            # Do NOT pre-create connections (safe startup)
     maxcached=2,            # Max idle connections
     blocking=True,          # Wait if pool is exhausted
