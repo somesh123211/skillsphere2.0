@@ -12,7 +12,7 @@ class _SignupPageState extends State<SignupPage> {
   final emailCtrl = TextEditingController();
   final passCtrl = TextEditingController();
 
-  final String baseUrl = "https://skillsphere2-0.onrender.com";
+  final String baseUrl = "https://skillsphere-2-qanz.onrender.com";
   bool loading = false;
 
   Future<void> signup() async {

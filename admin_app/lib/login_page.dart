@@ -36,7 +36,7 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController emailCtrl = TextEditingController();
   final TextEditingController passCtrl = TextEditingController();
 
-  final String baseUrl = "https://skillsphere2-0.onrender.com";
+  final String baseUrl = "https://skillsphere-2-qanz.onrender.com";
   bool loading = false;
 
   bool _obscurePassword = true;

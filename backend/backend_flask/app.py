@@ -1313,9 +1313,15 @@ def get_daily_quiz(year, quiz_type, uid, quiz_id=None):
             if not cache_row:
                 cur.close()
                 conn.close()
-                return []
-            
             frontend_questions = json.loads(cache_row["questions_json"])
+            if not frontend_questions:
+                cur.execute(f"DELETE FROM {cache_table} WHERE uid=%s AND quiz_date=%s AND quiz_id=%s", (uid, today, quiz_id))
+                cur.execute(f"DELETE FROM {attempts_table} WHERE uid=%s AND quiz_date=%s AND quiz_id=%s AND status='started'", (uid, today, quiz_id))
+                cur.execute("DELETE FROM daily_quiz_student_mapping WHERE uid=%s AND quiz_date=%s AND quiz_id=%s", (uid, today, quiz_id))
+                conn.commit()
+                cur.close()
+                conn.close()
+                return {"error": "Quiz is reloading. Please try opening it again."}
 
             # Load autosaved answers
             cur.execute("""
@@ -1520,6 +1526,12 @@ def get_daily_quiz(year, quiz_type, uid, quiz_id=None):
                     WHERE quiz_id = %s
                 """, (quiz_id,))
                 questions = cur.fetchall()
+
+            if not questions:
+                conn.rollback()
+                cur.close()
+                conn.close()
+                return {"error": "Quiz questions are being prepared. Please try again in a few seconds."}
 
             # 🔒 STICK TO EXACT question_per_set COUNT
             if questions and len(questions) > questions_per_set:
@@ -5876,7 +5888,7 @@ def build_and_send_faculty_quiz_report(quiz_id):
         if quiz_dept_id is not None:
             cur.execute(
                 """
-                SELECT s.uid, s.name, fa.score, fa.total,
+                SELECT s.uid, s.name, fa.marks_obtained AS score, fa.total_questions AS total,
                        CASE WHEN fa.uid IS NULL THEN 'Not Attempted' ELSE 'Attempted' END AS attempt_status
                 FROM students s
                 LEFT JOIN faculty_quiz_attempts fa
@@ -5998,8 +6010,8 @@ def purge_old_daily_quiz_data():
             # what the CSV report was built from, so it's safe to drop
             # now that it's been emailed.
             cur.execute(
-                f"DELETE FROM daily_quiz_questions_pregenerated WHERE quiz_id IN ({placeholders})",
-                quiz_ids
+                f"DELETE FROM daily_quiz_questions_pregenerated WHERE quiz_id IN ({placeholders}) AND year=%s",
+                quiz_ids + [year]
             )
             # Per-student copies of questions + their selected answers.
             cur.execute(f"DELETE FROM {bank_table} WHERE quiz_id IN ({placeholders})", quiz_ids)

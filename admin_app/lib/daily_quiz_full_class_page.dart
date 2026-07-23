@@ -42,7 +42,7 @@ class DailyQuizFullClassPage extends StatefulWidget {
 
 class _DailyQuizFullClassPageState extends State<DailyQuizFullClassPage> {
   // ================= CONFIG =================
-  final String baseUrl = "https://skillsphere2-0.onrender.com";
+  final String baseUrl = "https://skillsphere-2-qanz.onrender.com";
 
   // ================= STATE =================
   int selectedYear = 2;

@@ -36,7 +36,7 @@ class _AdminOtpPageState extends State<AdminOtpPage> {
   final otpCtrl = TextEditingController();
   bool loading = false;
 
-  final String baseUrl = "https://skillsphere2-0.onrender.com";
+  final String baseUrl = "https://skillsphere-2-qanz.onrender.com";
 
   Future<void> verifyOtp() async {
     if (otpCtrl.text.length != 6) {

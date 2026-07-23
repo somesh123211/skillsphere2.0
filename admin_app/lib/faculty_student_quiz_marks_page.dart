@@ -43,7 +43,7 @@ class FacultyStudentQuizMarksPage extends StatefulWidget {
 
 class _FacultyStudentQuizMarksPageState
     extends State<FacultyStudentQuizMarksPage> {
-  final String baseUrl = "https://skillsphere2-0.onrender.com";
+  final String baseUrl = "https://skillsphere-2-qanz.onrender.com";
 
   final TextEditingController uidCtrl = TextEditingController();
   int year = 2;

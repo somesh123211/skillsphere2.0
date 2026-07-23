@@ -34,7 +34,7 @@ class ViewQuizPage extends StatefulWidget {
 }
 
 class _ViewQuizPageState extends State<ViewQuizPage> {
-  final String baseUrl = "https://skillsphere2-0.onrender.com";
+  final String baseUrl = "https://skillsphere-2-qanz.onrender.com";
 
   final TextEditingController quizIdController = TextEditingController();
 

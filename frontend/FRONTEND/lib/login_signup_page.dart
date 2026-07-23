@@ -31,7 +31,7 @@ class _LoginSignupPageState extends State<LoginSignupPage> {
   Timer? _otpTimer;
 
   // CHANGE THIS TO YOUR IP IF ON REAL DEVICE
-  final String baseUrl = "https://skillsphere2-0.onrender.com";
+  final String baseUrl = "https://skillsphere-2-qanz.onrender.com";
 
   // ================= CONTROLLERS =================
   final nameController = TextEditingController();

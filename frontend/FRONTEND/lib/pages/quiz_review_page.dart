@@ -23,7 +23,7 @@ class QuizReviewPage extends StatefulWidget {
 }
 
 class _QuizReviewPageState extends State<QuizReviewPage> {
-  final String baseUrl = "https://skillsphere2-0.onrender.com";
+  final String baseUrl = "https://skillsphere-2-qanz.onrender.com";
 
   bool loading = true;
   List<Map<String, dynamic>> answers = [];

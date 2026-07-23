@@ -1,7 +1,7 @@
 """
 ====================================================================
   SKILL SPHERE STUDENT APP - LOCUST LOAD TESTING SCRIPT (50 TASKS)
-  Target Backend URL: https://skillsphere2-0.onrender.com
+  Target Backend URL: https://skillsphere-2-qanz.onrender.com
 ====================================================================
 Targets 100% authoritative Flask routes in app.py with valid payloads
 and handles expected domain responses (e.g. 404 No Quiz Today) using
@@ -24,7 +24,7 @@ HEADERS = {
 
 class StudentAppUser(HttpUser):
     wait_time = between(0.1, 0.5)
-    host = "https://skillsphere2-0.onrender.com"
+    host = "https://skillsphere-2-qanz.onrender.com"
 
     def on_start(self):
         """Authenticates student user dynamically on start."""

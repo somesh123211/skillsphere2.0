@@ -39,7 +39,7 @@ class DeleteQuizPage extends StatefulWidget {
 }
 
 class _DeleteQuizPageState extends State<DeleteQuizPage> {
-  final String baseUrl = "https://skillsphere2-0.onrender.com";
+  final String baseUrl = "https://skillsphere-2-qanz.onrender.com";
 
   final TextEditingController quizIdController = TextEditingController();
 

@@ -30,7 +30,7 @@ class _StudentProfilePageState extends State<StudentProfilePage>
   //            BACKEND LOGIC (PRESERVED)
   // ==========================================
 
-  final String baseUrl = "https://skillsphere2-0.onrender.com";
+  final String baseUrl = "https://skillsphere-2-qanz.onrender.com";
 
   Map<String, dynamic>? profile;
   Map<String, dynamic>? todayQuiz;

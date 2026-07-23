@@ -34,7 +34,7 @@ class AddDailyQuizPage extends StatefulWidget {
 }
 
 class _AddDailyQuizPageState extends State<AddDailyQuizPage> {
-  final String baseUrl = "https://skillsphere2-0.onrender.com";
+  final String baseUrl = "https://skillsphere-2-qanz.onrender.com";
 
   // Mode: add / progress / remove
   String mode = "add";
