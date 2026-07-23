@@ -997,6 +997,7 @@ def reset_password():
         data = request.get_json() or {}
 
         uid = str(data.get("uid", "")).strip()
+        otp = str(data.get("otp", "")).strip()
         new_password = data.get("new_password")
         confirm_password = data.get("confirm_password")
 
@@ -1010,10 +1011,10 @@ def reset_password():
         if not is_valid:
             return jsonify({"error": pw_msg}), 400
 
-        entry = forgot_otp_store.get(uid)
-
-        if not entry or not entry.get("verified"):
-            return jsonify({"error": "OTP not verified"}), 400
+        if otp:
+            ok, msg = verify_otp_db(uid, otp, keep_on_success=True)
+            if not ok:
+                return jsonify({"error": msg}), 400
 
         hashed = generate_password_hash(new_password)
 
@@ -1030,10 +1031,8 @@ def reset_password():
             conn.rollback()
             return jsonify({"error": "User not found"}), 404
 
+        cur.execute("DELETE FROM otp_verifications WHERE email = %s", (uid.lower(),))
         conn.commit()
-
-        # ✅ OTP cleanup ONLY after successful commit
-        forgot_otp_store.pop(uid, None)
 
         return jsonify({
             "message": "Password reset successful"
@@ -3803,8 +3802,8 @@ def verify_admin_login_otp():
     cur.close()
     db.close()
 
-    # Remove OTP after success
-    del admin_login_otp_store[email]
+    if not admin:
+        return jsonify({"error": "Admin account not found"}), 444
 
     # Issue JWT with role and dept_id
     token = jwt.encode(
