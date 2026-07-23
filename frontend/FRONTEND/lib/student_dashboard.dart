@@ -9,6 +9,7 @@ import 'daily_quiz_page.dart';
 import 'faculty_quiz_page.dart';
 import 'pages/student_profile.dart';
 import 'pages/quiz_review_page.dart';
+import 'services/fcm_service.dart';
 
 class StudentDashboard extends StatefulWidget {
   final String token;
@@ -63,6 +64,7 @@ class _StudentDashboardState extends State<StudentDashboard>
     fetchProfile();
     fetchTodayQuizStatus();
     fetchFacultyQuizList();
+    FCMService.syncCurrentToken();
 
     // 🔄 Refresh countdown every second to keep timers live
     uiTimer = Timer.periodic(const Duration(seconds: 1), (_) {

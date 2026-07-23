@@ -96,6 +96,20 @@ class FCMService {
     }
   }
 
+  static Future<void> syncCurrentToken() async {
+    try {
+      FirebaseMessaging messaging = FirebaseMessaging.instance;
+      String? token = await messaging.getToken();
+      if (token != null) {
+        await syncTokenWithBackend(token);
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('[FCM Sync Error]: $e');
+      }
+    }
+  }
+
   static Future<void> syncTokenWithBackend(String token) async {
     try {
       final prefs = await SharedPreferences.getInstance();
