@@ -21,6 +21,8 @@ def init_firebase():
     if env_json:
         try:
             cert_dict = json.loads(env_json)
+            if "private_key" in cert_dict and isinstance(cert_dict["private_key"], str):
+                cert_dict["private_key"] = cert_dict["private_key"].replace("\\n", "\n")
             cred = credentials.Certificate(cert_dict)
             firebase_admin.initialize_app(cred)
             _firebase_initialized = True
