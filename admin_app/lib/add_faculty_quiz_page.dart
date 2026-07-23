@@ -660,7 +660,7 @@ class _AddFacultyQuizPageState extends State<AddFacultyQuizPage> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Expanded(
-                  child: _buildSectionHeader("Step 3", "Upload Questions (CSV)"),
+                  child: _buildSectionHeader("Step 3", "Upload Questions"),
                 ),
                 const SizedBox(width: 8),
                 OutlinedButton.icon(
@@ -677,12 +677,6 @@ class _AddFacultyQuizPageState extends State<AddFacultyQuizPage> {
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            const Text(
-              "Columns required: question, option_a, option_b, option_c, "
-              "option_d, correct_option (A/B/C/D). Max $maxQuestions questions.",
-              style: TextStyle(color: AurumColors.textGrey, fontSize: 12),
-            ),
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.all(20),
@@ -698,56 +692,52 @@ class _AddFacultyQuizPageState extends State<AddFacultyQuizPage> {
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 30),
                   decoration: BoxDecoration(
-                    border: Border.all(
-                      color: csvFileName == null
-                          ? AurumColors.textGrey.withOpacity(0.3)
-                          : AurumColors.successGreen,
-                      width: 2,
-                    ),
+                    color: Colors.black.withOpacity(0.3),
                     borderRadius: BorderRadius.circular(16),
-                    color: csvFileName == null
-                        ? Colors.transparent
-                        : AurumColors.successGreen.withOpacity(0.1),
+                    border: Border.all(
+                      color: AurumColors.accentGold.withOpacity(0.3),
+                      width: 1.5,
+                    ),
                   ),
                   child: Column(
                     children: [
-                      Icon(
-                        csvFileName == null
-                            ? Icons.upload_file
-                            : Icons.description,
-                        size: 40,
-                        color: csvFileName == null
-                            ? AurumColors.textGrey
-                            : AurumColors.successGreen,
+                      const Icon(
+                        Icons.cloud_upload_outlined,
+                        color: AurumColors.accentGold,
+                        size: 44,
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        csvFileName == null
-                            ? "Tap to Select CSV File"
-                            : "$csvFileName ($csvRowCount questions)",
+                        selectedCsvFileName ?? "Tap to Select CSV File",
                         style: TextStyle(
-                          color: csvFileName == null
-                              ? AurumColors.textGrey
+                          color: selectedCsvFileName != null
+                              ? AurumColors.accentGold
                               : AurumColors.textWhite,
+                          fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
+                      if (selectedCsvFileName != null) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          "${parsedCsvQuestions.length} questions parsed",
+                          style: const TextStyle(
+                            color: AurumColors.textGrey,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
               ),
             ),
-
-            const SizedBox(height: 16),
-
+            const SizedBox(height: 24),
             SizedBox(
               width: double.infinity,
+              height: 50,
               child: OutlinedButton.icon(
-                onPressed: (csvFileName == null || checkingCsv)
-                    ? null
-                    : checkCsv,
                 style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
                   side: const BorderSide(color: AurumColors.accentGold),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -824,6 +814,7 @@ class _AddFacultyQuizPageState extends State<AddFacultyQuizPage> {
 
   Widget _buildSectionHeader(String step, String title) {
     return Row(
+      mainAxisSize: MainAxisSize.min,
       children: [
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -840,13 +831,17 @@ class _AddFacultyQuizPageState extends State<AddFacultyQuizPage> {
             ),
           ),
         ),
-        const SizedBox(width: 12),
-        Text(
-          title,
-          style: const TextStyle(
-            color: AurumColors.textWhite,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
+        const SizedBox(width: 10),
+        Flexible(
+          child: Text(
+            title,
+            style: const TextStyle(
+              color: AurumColors.textWhite,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
           ),
         ),
       ],

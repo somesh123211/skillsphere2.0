@@ -6321,7 +6321,6 @@ def check_and_send_scheduled_notifications():
     try:
         now_ist = datetime.now(IST)
         today_date = now_ist.date()
-        current_time_str = now_ist.strftime("%H:%M")
         
         conn = get_db()
         cur = conn.cursor(pymysql.cursors.DictCursor)
@@ -6337,20 +6336,20 @@ def check_and_send_scheduled_notifications():
             for q in quizzes:
                 subj = q.get("subject") or q.get("topic") or "Daily Quiz"
                 dept = q.get("department") or "ALL"
-                st = str(q.get("quiz_start_time") or "").strip()[:5]
-                et = str(q.get("quiz_end_time") or "").strip()[:5]
                 
-                # Type 2: Quiz Started
-                if st == current_time_str:
-                    started_key = f"daily_start_now_{year}_{q['id']}_{today_date}_{st}"
-                    if try_acquire_notification_lock(started_key):
-                        notify_quiz_started(year, dept, subj)
-                    
-                # Type 3: 10 Minutes Before Quiz Starts (Unattempted Reminder)
                 start_dt = _parse_quiz_dt_safe(today_date, q.get("quiz_start_time"))
                 if start_dt:
-                    start_diff = (start_dt - now_ist).total_seconds() / 60.0
-                    if 0.0 <= start_diff <= 10.5:
+                    diff_start = (now_ist - start_dt).total_seconds()
+                    # Type 2: Quiz Started (triggered within 0 - 10 mins after start time)
+                    if 0.0 <= diff_start <= 600.0:
+                        st_clean = start_dt.strftime("%H:%M")
+                        started_key = f"daily_start_now_{year}_{q['id']}_{today_date}_{st_clean}"
+                        if try_acquire_notification_lock(started_key):
+                            notify_quiz_started(year, dept, subj)
+                    
+                    # Type 3: 10 Minutes Before Quiz Starts (Unattempted Reminder)
+                    rem_start_diff = (start_dt - now_ist).total_seconds() / 60.0
+                    if 0.0 <= rem_start_diff <= 10.5:
                         start_rem_key = f"daily_start_rem_{year}_{q['id']}_{today_date}"
                         if try_acquire_notification_lock(start_rem_key):
                             dept_id = BRANCH_TO_DEPT_ID.get(dept)
@@ -6397,18 +6396,18 @@ def check_and_send_scheduled_notifications():
             subj = fq.get("quiz_name") or "Faculty Quiz"
             dept = fq.get("department") or "ALL"
             year = fq.get("year") or 1
-            st = str(fq.get("quiz_start_time") or "").strip()[:5]
-            et = str(fq.get("quiz_end_time") or "").strip()[:5]
             
-            if st == current_time_str:
-                fac_start_key = f"fac_start_now_{fq['quiz_id']}_{today_date}_{st}"
-                if try_acquire_notification_lock(fac_start_key):
-                    notify_quiz_started(year, dept, subj)
-                
             start_dt = _parse_quiz_dt_safe(today_date, fq.get("quiz_start_time"))
             if start_dt:
-                start_diff = (start_dt - now_ist).total_seconds() / 60.0
-                if 0.0 <= start_diff <= 10.5:
+                diff_start = (now_ist - start_dt).total_seconds()
+                if 0.0 <= diff_start <= 600.0:
+                    st_clean = start_dt.strftime("%H:%M")
+                    fac_start_key = f"fac_start_now_{fq['quiz_id']}_{today_date}_{st_clean}"
+                    if try_acquire_notification_lock(fac_start_key):
+                        notify_quiz_started(year, dept, subj)
+                
+                rem_start_diff = (start_dt - now_ist).total_seconds() / 60.0
+                if 0.0 <= rem_start_diff <= 10.5:
                     fac_start_rem_key = f"fac_start_rem_{fq['quiz_id']}_{today_date}"
                     if try_acquire_notification_lock(fac_start_rem_key):
                         dept_id = BRANCH_TO_DEPT_ID.get(dept)
