@@ -42,14 +42,14 @@ class _LoginSignupPageState extends State<LoginSignupPage> {
   final otpController = TextEditingController();
 
   // ================= FIXED / OPTION VALUES =================
-  String selectedYear = '1ST YEAR';
+  String selectedYear = '1st Year';
   String selectedBranch = 'AI';
 
   final List<String> yearOptions = const [
-    '1ST YEAR',
-    '2ND YEAR',
-    '3RD YEAR',
-    '4TH YEAR',
+    '1st Year',
+    '2nd Year',
+    '3rd Year',
+    '4th Year',
   ];
 
   final Map<String, String> departmentOptions = const {
@@ -183,7 +183,7 @@ class _LoginSignupPageState extends State<LoginSignupPage> {
       "name": nameController.text.trim(),
       "uid": uidController.text.trim(),
       "branch": selectedBranch,
-      "year": selectedYear.substring(0, 1),
+      "year": RegExp(r'\d').firstMatch(selectedYear)?.group(0) ?? "1",
       "email": emailController.text.trim(),
       "password": passwordController.text.trim(),
       "otp": otpController.text.trim(),
@@ -738,37 +738,91 @@ class _SegmentedButton<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      children: values.map((v) {
-        final isSelected = v == selected;
-        return Expanded(
-          child: GestureDetector(
-            onTap: () => onChanged(v),
-            child: Container(
-              height: 44,
-              margin: const EdgeInsets.symmetric(horizontal: 4),
-              decoration: BoxDecoration(
-                color: isSelected
-                    ? Colors.white.withOpacity(0.2)
-                    : Colors.white.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: isSelected
-                      ? const Color(0xFF00d4ff)
-                      : Colors.white.withOpacity(0.1),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 8),
+          child: Row(
+            children: const [
+              Icon(Icons.school_outlined, size: 16, color: Color(0xFF00D4FF)),
+              SizedBox(width: 6),
+              Text(
+                "Select Academic Year",
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
-              child: Center(
-                child: Text(
-                  v.toString(),
-                  style: const TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.bold),
-                ),
-              ),
-            ),
+            ],
           ),
-        );
-      }).toList(),
+        ),
+        Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.04),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.white.withOpacity(0.08)),
+          ),
+          child: Row(
+            children: values.map((v) {
+              final isSelected = v == selected;
+              return Expanded(
+                child: GestureDetector(
+                  onTap: () => onChanged(v),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeInOut,
+                    height: 42,
+                    margin: const EdgeInsets.symmetric(horizontal: 2),
+                    decoration: BoxDecoration(
+                      gradient: isSelected
+                          ? const LinearGradient(
+                              colors: [Color(0xFF00D4FF), Color(0xFF0072FF)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            )
+                          : null,
+                      color: isSelected ? null : Colors.transparent,
+                      borderRadius: BorderRadius.circular(10),
+                      boxShadow: isSelected
+                          ? [
+                              BoxShadow(
+                                color: const Color(0xFF00D4FF).withOpacity(0.35),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              )
+                            ]
+                          : [],
+                    ),
+                    child: Center(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: Text(
+                            v.toString(),
+                            maxLines: 1,
+                            style: TextStyle(
+                              color: isSelected ? Colors.white : Colors.white70,
+                              fontSize: 13,
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ],
     );
   }
 }
