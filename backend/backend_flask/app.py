@@ -6312,13 +6312,33 @@ def run_daily_quiz_maintenance():
     check_and_send_scheduled_notifications()
 
 
+_sent_reminder_keys = set()
+
+def _parse_quiz_dt_safe(date_val, time_val):
+    if not time_val:
+        return None
+    try:
+        t_str = str(time_val).strip().split(" ")[0]
+        parts = t_str.split(":")
+        if len(parts) == 2:
+            dt = datetime.strptime(f"{date_val} {t_str}", "%Y-%m-%d %H:%M")
+        elif len(parts) >= 3:
+            dt = datetime.strptime(f"{date_val} {parts[0]}:{parts[1]}", "%Y-%m-%d %H:%M")
+        else:
+            return None
+        return IST.localize(dt)
+    except Exception:
+        return None
+
+
 def check_and_send_scheduled_notifications():
     """
     Background worker running every 60 seconds to check:
     1. Quizzes starting right now (Type 2): quiz_start_time matches current HH:MM IST.
-    2. Quizzes ending in ~10 minutes (Type 3): 9-10 mins left before quiz_end_time,
+    2. Quizzes starting or ending in ~10 minutes (Type 3): 10 mins before start or end time,
        finding students who have NOT attempted yet and sending a warning.
     """
+    global _sent_reminder_keys
     try:
         now_ist = datetime.now(IST)
         today_date = now_ist.date()
@@ -6343,15 +6363,18 @@ def check_and_send_scheduled_notifications():
                 
                 # Type 2: Quiz Started
                 if st == current_time_str:
-                    notify_quiz_started(year, dept, subj)
+                    started_key = f"daily_start_now_{year}_{q['id']}_{today_date}_{st}"
+                    if started_key not in _sent_reminder_keys:
+                        notify_quiz_started(year, dept, subj)
+                        _sent_reminder_keys.add(started_key)
                     
-                # Type 3: 10 Minutes Left Warning
-                if et:
-                    try:
-                        end_dt = datetime.strptime(f"{today_date} {et}", "%Y-%m-%d %H:%M")
-                        end_dt = IST.localize(end_dt)
-                        diff_minutes = (end_dt - now_ist).total_seconds() / 60.0
-                        if 9.0 <= diff_minutes <= 10.5:
+                # Type 3: 10 Minutes Before Quiz Starts (Unattempted Reminder)
+                start_dt = _parse_quiz_dt_safe(today_date, q.get("quiz_start_time"))
+                if start_dt:
+                    start_diff = (start_dt - now_ist).total_seconds() / 60.0
+                    if 0.0 <= start_diff <= 10.5:
+                        start_rem_key = f"daily_start_rem_{year}_{q['id']}_{today_date}"
+                        if start_rem_key not in _sent_reminder_keys:
                             dept_id = BRANCH_TO_DEPT_ID.get(dept)
                             cur.execute(
                                 f"""
@@ -6366,8 +6389,30 @@ def check_and_send_scheduled_notifications():
                             unattempted_uids = [r["uid"] for r in cur.fetchall()]
                             if unattempted_uids:
                                 notify_quiz_expiring_soon(year, dept, subj, unattempted_uids)
-                    except Exception as ex:
-                        pass
+                                _sent_reminder_keys.add(start_rem_key)
+
+                # Type 3: 10 Minutes Before Quiz Ends (Unattempted Reminder)
+                end_dt = _parse_quiz_dt_safe(today_date, q.get("quiz_end_time"))
+                if end_dt:
+                    end_diff = (end_dt - now_ist).total_seconds() / 60.0
+                    if 0.0 <= end_diff <= 10.5:
+                        end_rem_key = f"daily_end_rem_{year}_{q['id']}_{today_date}"
+                        if end_rem_key not in _sent_reminder_keys:
+                            dept_id = BRANCH_TO_DEPT_ID.get(dept)
+                            cur.execute(
+                                f"""
+                                SELECT s.uid FROM students s
+                                WHERE s.year = %s AND (s.branch = %s OR s.dept_id = %s OR %s = 'ALL' OR s.branch IS NULL)
+                                AND s.uid NOT IN (
+                                    SELECT uid FROM {attempts_table} WHERE quiz_date = %s AND quiz_id = %s
+                                )
+                                """,
+                                (year, dept, dept_id, dept, today_date, q["id"])
+                            )
+                            unattempted_uids = [r["uid"] for r in cur.fetchall()]
+                            if unattempted_uids:
+                                notify_quiz_expiring_soon(year, dept, subj, unattempted_uids)
+                                _sent_reminder_keys.add(end_rem_key)
 
         # Check Faculty Quizzes
         cur.execute("SELECT quiz_id, quiz_name, department, year, quiz_start_time, quiz_end_time FROM faculty_quiz_master WHERE quiz_date=%s", (today_date,))
@@ -6380,14 +6425,17 @@ def check_and_send_scheduled_notifications():
             et = str(fq.get("quiz_end_time") or "").strip()[:5]
             
             if st == current_time_str:
-                notify_quiz_started(year, dept, subj)
+                fac_start_key = f"fac_start_now_{fq['quiz_id']}_{today_date}_{st}"
+                if fac_start_key not in _sent_reminder_keys:
+                    notify_quiz_started(year, dept, subj)
+                    _sent_reminder_keys.add(fac_start_key)
                 
-            if et:
-                try:
-                    end_dt = datetime.strptime(f"{today_date} {et}", "%Y-%m-%d %H:%M")
-                    end_dt = IST.localize(end_dt)
-                    diff_minutes = (end_dt - now_ist).total_seconds() / 60.0
-                    if 9.0 <= diff_minutes <= 10.5:
+            start_dt = _parse_quiz_dt_safe(today_date, fq.get("quiz_start_time"))
+            if start_dt:
+                start_diff = (start_dt - now_ist).total_seconds() / 60.0
+                if 0.0 <= start_diff <= 10.5:
+                    fac_start_rem_key = f"fac_start_rem_{fq['quiz_id']}_{today_date}"
+                    if fac_start_rem_key not in _sent_reminder_keys:
                         dept_id = BRANCH_TO_DEPT_ID.get(dept)
                         cur.execute(
                             """
@@ -6402,8 +6450,29 @@ def check_and_send_scheduled_notifications():
                         unattempted_uids = [r["uid"] for r in cur.fetchall()]
                         if unattempted_uids:
                             notify_quiz_expiring_soon(year, dept, subj, unattempted_uids)
-                except Exception as ex:
-                    pass
+                            _sent_reminder_keys.add(fac_start_rem_key)
+
+            end_dt = _parse_quiz_dt_safe(today_date, fq.get("quiz_end_time"))
+            if end_dt:
+                end_diff = (end_dt - now_ist).total_seconds() / 60.0
+                if 0.0 <= end_diff <= 10.5:
+                    fac_end_rem_key = f"fac_end_rem_{fq['quiz_id']}_{today_date}"
+                    if fac_end_rem_key not in _sent_reminder_keys:
+                        dept_id = BRANCH_TO_DEPT_ID.get(dept)
+                        cur.execute(
+                            """
+                            SELECT s.uid FROM students s
+                            WHERE s.year = %s AND (s.branch = %s OR s.dept_id = %s OR %s = 'ALL' OR s.branch IS NULL)
+                            AND s.uid NOT IN (
+                                SELECT uid FROM faculty_quiz_attempts WHERE quiz_id = %s
+                            )
+                            """,
+                            (year, dept, dept_id, dept, fq["quiz_id"])
+                        )
+                        unattempted_uids = [r["uid"] for r in cur.fetchall()]
+                        if unattempted_uids:
+                            notify_quiz_expiring_soon(year, dept, subj, unattempted_uids)
+                            _sent_reminder_keys.add(fac_end_rem_key)
 
         cur.close()
         conn.close()
