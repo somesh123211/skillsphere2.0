@@ -133,6 +133,10 @@ def send_fcm_notification(fcm_tokens, title, body, data=None):
             response = messaging.send_each_for_multicast(message)
             total_sent += response.success_count
             print(f"[FCM] Sent batch of {len(batch)} notifications: {response.success_count} succeeded, {response.failure_count} failed.")
+            if response.failure_count > 0:
+                for idx, resp in enumerate(response.responses):
+                    if not resp.success:
+                        print(f"[FCM Failure Detail] Token index {idx} error: {resp.exception}")
         except Exception as e:
             print(f"[FCM] Error sending multicast batch: {e}")
             
