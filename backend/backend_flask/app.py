@@ -248,8 +248,7 @@ MAX_ATTEMPTS = 3
 
 def save_otp_db(key_identifier, otp, ttl_seconds=300):
     key = str(key_identifier).strip().lower()
-    expires_at = datetime.now(IST) + timedelta(seconds=ttl_seconds)
-    expires_str = expires_at.strftime("%Y-%m-%d %H:%M:%S")
+    exp_ts = int(time.time()) + ttl_seconds
     conn = None
     cur = None
     try:
@@ -259,7 +258,7 @@ def save_otp_db(key_identifier, otp, ttl_seconds=300):
             INSERT INTO otp_verifications (email, otp, expires_at, attempts)
             VALUES (%s, %s, %s, 0)
             ON DUPLICATE KEY UPDATE otp=%s, expires_at=%s, attempts=0
-        """, (key, otp, expires_str, otp, expires_str))
+        """, (key, otp, exp_ts, otp, exp_ts))
         conn.commit()
     except Exception as e:
         print("[OTP DB Save Error]:", e)
@@ -284,14 +283,13 @@ def verify_otp_db(key_identifier, entered, keep_on_success=False):
         if not row:
             return False, "OTP not found or expired"
             
-        exp_dt = row["expires_at"]
-        if isinstance(exp_dt, str):
-            exp_dt = datetime.strptime(exp_dt, "%Y-%m-%d %H:%M:%S")
-        if exp_dt.tzinfo is None:
-            exp_dt = IST.localize(exp_dt)
+        try:
+            exp_ts = int(row["expires_at"])
+        except Exception:
+            exp_ts = 0
             
-        now_ist = datetime.now(IST)
-        if now_ist > exp_dt:
+        now_ts = int(time.time())
+        if now_ts > exp_ts:
             cur.execute("DELETE FROM otp_verifications WHERE email = %s", (key,))
             conn.commit()
             return False, "OTP expired"
