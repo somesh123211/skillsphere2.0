@@ -5127,12 +5127,9 @@ def generate_daily_set_mcqs(year, quiz_date, set_number, topics, difficulty, num
     last_error = None
     for key in shuffled_keys:
         try:
-            client_opts = ClientOptions(api_key=key)
-            my_client = glm.GenerativeServiceClient(client_options=client_opts)
-            
+            genai.configure(api_key=key)
             model_name = "gemma-4-31b-it"
             model = genai.GenerativeModel(model_name)
-            model._client = my_client
             
             response = model.generate_content(
                 prompt,
