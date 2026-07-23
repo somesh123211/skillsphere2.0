@@ -5932,15 +5932,16 @@ def build_and_send_faculty_quiz_report(quiz_id):
         quiz_dept = quiz.get("department") or ""
         quiz_dept_id = BRANCH_TO_DEPT_ID.get(quiz_dept)
 
+        marks_table = f"assignment_quiz_marks_y{year}"
         marks_pdf_bytes = None
         if quiz_dept_id is not None:
             cur.execute(
-                """
-                SELECT s.uid, s.name, fa.marks_obtained AS score, fa.total_questions AS total,
-                       CASE WHEN fa.uid IS NULL THEN 'Not Attempted' ELSE 'Attempted' END AS attempt_status
+                f"""
+                SELECT s.uid, s.name, m.score AS score, m.total_questions AS total,
+                       CASE WHEN m.uid IS NULL THEN 'Not Attempted' ELSE 'Attempted' END AS attempt_status
                 FROM students s
-                LEFT JOIN faculty_quiz_attempts fa
-                    ON s.uid = fa.uid AND fa.quiz_id = %s
+                LEFT JOIN {marks_table} m
+                    ON s.uid = m.uid AND m.quiz_id = %s
                 WHERE CAST(s.year AS UNSIGNED) = %s AND s.dept_id = %s
                 ORDER BY s.uid
                 """,
@@ -6351,15 +6352,16 @@ def check_and_send_scheduled_notifications():
                         end_dt = IST.localize(end_dt)
                         diff_minutes = (end_dt - now_ist).total_seconds() / 60.0
                         if 9.0 <= diff_minutes <= 10.5:
+                            dept_id = BRANCH_TO_DEPT_ID.get(dept)
                             cur.execute(
                                 f"""
                                 SELECT s.uid FROM students s
-                                WHERE s.year = %s AND (s.department = %s OR %s = 'ALL' OR s.department IS NULL)
+                                WHERE s.year = %s AND (s.branch = %s OR s.dept_id = %s OR %s = 'ALL' OR s.branch IS NULL)
                                 AND s.uid NOT IN (
                                     SELECT uid FROM {attempts_table} WHERE quiz_date = %s AND quiz_id = %s
                                 )
                                 """,
-                                (year, dept, dept, today_date, q["id"])
+                                (year, dept, dept_id, dept, today_date, q["id"])
                             )
                             unattempted_uids = [r["uid"] for r in cur.fetchall()]
                             if unattempted_uids:
@@ -6386,15 +6388,16 @@ def check_and_send_scheduled_notifications():
                     end_dt = IST.localize(end_dt)
                     diff_minutes = (end_dt - now_ist).total_seconds() / 60.0
                     if 9.0 <= diff_minutes <= 10.5:
+                        dept_id = BRANCH_TO_DEPT_ID.get(dept)
                         cur.execute(
                             """
                             SELECT s.uid FROM students s
-                            WHERE s.year = %s AND (s.department = %s OR %s = 'ALL' OR s.department IS NULL)
+                            WHERE s.year = %s AND (s.branch = %s OR s.dept_id = %s OR %s = 'ALL' OR s.branch IS NULL)
                             AND s.uid NOT IN (
                                 SELECT uid FROM faculty_quiz_attempts WHERE quiz_id = %s
                             )
                             """,
-                            (year, dept, dept, fq["quiz_id"])
+                            (year, dept, dept_id, dept, fq["quiz_id"])
                         )
                         unattempted_uids = [r["uid"] for r in cur.fetchall()]
                         if unattempted_uids:

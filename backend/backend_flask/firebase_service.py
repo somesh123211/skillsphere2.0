@@ -5,6 +5,11 @@ from firebase_admin import credentials, messaging
 from db import get_db
 import pymysql.cursors
 
+BRANCH_TO_DEPT_ID = {
+    "AI": 7, "DS": 8, "CSE": 2, "IT": 5, "ETC": 3, "MECH": 6,
+    "CIVIL": 1, "EE": 4, "CS-CY": 10, "CSBS": 11, "IIOT": 9, "RAI": 12
+}
+
 _firebase_initialized = False
 
 def init_firebase():
@@ -55,9 +60,14 @@ def get_student_fcm_tokens(year=None, department=None):
             query += " AND year = %s"
             params.append(year)
             
-        if department and department.upper() != "ALL":
-            query += " AND (department = %s OR department = 'ALL' OR department IS NULL)"
-            params.append(department)
+        if department and str(department).upper() != "ALL":
+            dept_id = BRANCH_TO_DEPT_ID.get(department)
+            if dept_id:
+                query += " AND (branch = %s OR dept_id = %s OR branch IS NULL)"
+                params.extend([department, dept_id])
+            else:
+                query += " AND (branch = %s OR branch IS NULL)"
+                params.append(department)
             
         cur.execute(query, tuple(params))
         rows = cur.fetchall()
