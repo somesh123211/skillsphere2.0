@@ -3,8 +3,11 @@ import 'package:http/http.dart' as http;
 import 'login_signup_page.dart';
 import 'student_dashboard.dart';
 import 'session_storage.dart';
+import 'services/fcm_service.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await FCMService.initialize();
   runApp(const MyApp());
 }
 

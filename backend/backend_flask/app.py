@@ -8,6 +8,13 @@ from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.exceptions import HTTPException
 from functools import wraps
+from firebase_service import (
+    notify_quiz_published,
+    notify_quiz_started,
+    notify_quiz_expiring_soon,
+    notify_answer_key_released,
+    notify_quiz_time_updated,
+)
 
 import smtplib
 from email.mime.text import MIMEText
@@ -2050,6 +2057,36 @@ def profile_review(current_user):
         if conn:
             conn.close()
 
+
+
+@app.route("/api/profile/fcm_token", methods=["POST", "OPTIONS"])
+@token_required
+def update_fcm_token(current_user):
+    if request.method == "OPTIONS":
+        return jsonify({"status": "ok"}), 200
+    conn = None
+    cur = None
+    try:
+        uid = current_user["uid"]
+        data = request.get_json(silent=True) or {}
+        fcm_token = data.get("fcm_token") or request.form.get("fcm_token")
+        
+        if not fcm_token:
+            return jsonify({"error": "fcm_token required"}), 400
+            
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("UPDATE students SET fcm_token = %s WHERE uid = %s", (fcm_token, uid))
+        conn.commit()
+        return jsonify({"message": "FCM token updated successfully", "status": "success"}), 200
+    except Exception as e:
+        print("[FCM] Error updating token:", e)
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
 
 
 @app.route("/api/profile/status", methods=["GET"])
@@ -4934,6 +4971,17 @@ def insert_daily_quiz_topic(admin):
         t.daemon = True
         t.start()
 
+        try:
+            notify_quiz_published(
+                year=year,
+                department=department,
+                subject_name=subject or topic,
+                start_time_str=quiz_start_time,
+                is_faculty_quiz=False
+            )
+        except Exception as n_err:
+            print("[FCM] Error notifying daily quiz publication:", n_err)
+
         return jsonify({
             "success": True,
             "message": "Daily Quiz Published Successfully. Generating sets..."
@@ -5933,6 +5981,10 @@ def build_and_send_faculty_quiz_report(quiz_id):
 
         cur.execute("UPDATE faculty_quiz_master SET csv_sent=1 WHERE quiz_id=%s", (quiz_id,))
         conn.commit()
+        try:
+            notify_answer_key_released(year=year, department=quiz_dept, quiz_title=quiz["quiz_name"])
+        except Exception as n_err:
+            print("[FCM] Error notifying answer key release:", n_err)
         print(f"[Maintenance] Emailed Faculty Quiz report for quiz_id={quiz_id} to {creator_email}")
     except Exception as e:
         if conn:
@@ -6256,6 +6308,104 @@ def run_daily_quiz_maintenance():
     auto_finalize_abandoned_faculty_quizzes()
     scan_and_send_faculty_quiz_reports()
     purge_old_daily_quiz_data()
+    check_and_send_scheduled_notifications()
+
+
+def check_and_send_scheduled_notifications():
+    """
+    Background worker running every 60 seconds to check:
+    1. Quizzes starting right now (Type 2): quiz_start_time matches current HH:MM IST.
+    2. Quizzes ending in ~10 minutes (Type 3): 9-10 mins left before quiz_end_time,
+       finding students who have NOT attempted yet and sending a warning.
+    """
+    try:
+        now_ist = datetime.now(IST)
+        today_date = now_ist.date()
+        current_time_str = now_ist.strftime("%H:%M")
+        
+        conn = get_db()
+        cur = conn.cursor(pymysql.cursors.DictCursor)
+        
+        # Check Daily Quizzes across 4 years
+        for year in (1, 2, 3, 4):
+            table = f"daily_quiz_topics_y{year}"
+            attempts_table = f"daily_quiz_attempts_y{year}"
+            
+            cur.execute(f"SELECT id, subject, topic, department, quiz_start_time, quiz_end_time, status FROM {table} WHERE quiz_date=%s AND status='READY'", (today_date,))
+            quizzes = cur.fetchall()
+            
+            for q in quizzes:
+                subj = q.get("subject") or q.get("topic") or "Daily Quiz"
+                dept = q.get("department") or "ALL"
+                st = str(q.get("quiz_start_time") or "").strip()[:5]
+                et = str(q.get("quiz_end_time") or "").strip()[:5]
+                
+                # Type 2: Quiz Started
+                if st == current_time_str:
+                    notify_quiz_started(year, dept, subj)
+                    
+                # Type 3: 10 Minutes Left Warning
+                if et:
+                    try:
+                        end_dt = datetime.strptime(f"{today_date} {et}", "%Y-%m-%d %H:%M")
+                        end_dt = IST.localize(end_dt)
+                        diff_minutes = (end_dt - now_ist).total_seconds() / 60.0
+                        if 9.0 <= diff_minutes <= 10.5:
+                            cur.execute(
+                                f"""
+                                SELECT s.uid FROM students s
+                                WHERE s.year = %s AND (s.department = %s OR %s = 'ALL' OR s.department IS NULL)
+                                AND s.uid NOT IN (
+                                    SELECT uid FROM {attempts_table} WHERE quiz_date = %s AND quiz_id = %s
+                                )
+                                """,
+                                (year, dept, dept, today_date, q["id"])
+                            )
+                            unattempted_uids = [r["uid"] for r in cur.fetchall()]
+                            if unattempted_uids:
+                                notify_quiz_expiring_soon(year, dept, subj, unattempted_uids)
+                    except Exception as ex:
+                        pass
+
+        # Check Faculty Quizzes
+        cur.execute("SELECT quiz_id, quiz_name, department, year, quiz_start_time, quiz_end_time FROM faculty_quiz_master WHERE quiz_date=%s", (today_date,))
+        fac_quizzes = cur.fetchall()
+        for fq in fac_quizzes:
+            subj = fq.get("quiz_name") or "Faculty Quiz"
+            dept = fq.get("department") or "ALL"
+            year = fq.get("year") or 1
+            st = str(fq.get("quiz_start_time") or "").strip()[:5]
+            et = str(fq.get("quiz_end_time") or "").strip()[:5]
+            
+            if st == current_time_str:
+                notify_quiz_started(year, dept, subj)
+                
+            if et:
+                try:
+                    end_dt = datetime.strptime(f"{today_date} {et}", "%Y-%m-%d %H:%M")
+                    end_dt = IST.localize(end_dt)
+                    diff_minutes = (end_dt - now_ist).total_seconds() / 60.0
+                    if 9.0 <= diff_minutes <= 10.5:
+                        cur.execute(
+                            """
+                            SELECT s.uid FROM students s
+                            WHERE s.year = %s AND (s.department = %s OR %s = 'ALL' OR s.department IS NULL)
+                            AND s.uid NOT IN (
+                                SELECT uid FROM faculty_quiz_attempts WHERE quiz_id = %s
+                            )
+                            """,
+                            (year, dept, dept, fq["quiz_id"])
+                        )
+                        unattempted_uids = [r["uid"] for r in cur.fetchall()]
+                        if unattempted_uids:
+                            notify_quiz_expiring_soon(year, dept, subj, unattempted_uids)
+                except Exception as ex:
+                    pass
+
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print("[FCM Scheduler Error]:", e)
 
 
 _last_maintenance_run = None
@@ -6579,6 +6729,18 @@ def create_faculty_quiz(admin):
             ))
 
         conn.commit()
+        try:
+            notify_quiz_published(
+                year=year,
+                department=department,
+                subject_name=department,
+                start_time_str=quiz_start_time,
+                is_faculty_quiz=True,
+                quiz_title=quiz_name
+            )
+        except Exception as n_err:
+            print("[FCM] Error notifying faculty quiz publication:", n_err)
+
         return jsonify({
             "success": True,
             "quiz_id": quiz_id,
@@ -6735,6 +6897,14 @@ def edit_daily_quiz_time(admin):
                 WHERE quiz_date=%s AND quiz_type='placement'
             """, (quiz_start_time, quiz_end_time, quiz_date))
         conn.commit()
+        try:
+            cur.execute(f"SELECT subject, topic, department FROM {table} WHERE id=%s" if quiz_id else f"SELECT subject, topic, department FROM {table} WHERE quiz_date=%s AND quiz_type='placement'", (quiz_id or quiz_date,))
+            t_info = cur.fetchone() or {}
+            subj = t_info.get("subject") or t_info.get("topic") or "Daily Quiz"
+            dept = t_info.get("department") or "ALL"
+            notify_quiz_time_updated(year=year, department=dept, subject_name=subj, start_time_str=str(quiz_start_time), end_time_str=str(quiz_end_time))
+        except Exception as n_err:
+            print("[FCM] Error notifying time update:", n_err)
 
         return jsonify({"success": True, "message": "Quiz timings updated successfully"}), 200
     except Exception as e:

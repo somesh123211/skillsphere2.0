@@ -32,3 +32,6 @@ build/
 .idea/
 .vscode/
 *.iml
+firebase-service-account.json
+*.json
+
