@@ -246,8 +246,78 @@ def parse_time_field(val):
 OTP_TTL_SECONDS = 5 * 60
 MAX_ATTEMPTS = 3
 
-otp_store = {}
-forgot_otp_store = {}
+def save_otp_db(key_identifier, otp, ttl_seconds=300):
+    key = str(key_identifier).strip().lower()
+    expires_at = datetime.now(IST) + timedelta(seconds=ttl_seconds)
+    expires_str = expires_at.strftime("%Y-%m-%d %H:%M:%S")
+    conn = None
+    cur = None
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO otp_verifications (email, otp, expires_at, attempts)
+            VALUES (%s, %s, %s, 0)
+            ON DUPLICATE KEY UPDATE otp=%s, expires_at=%s, attempts=0
+        """, (key, otp, expires_str, otp, expires_str))
+        conn.commit()
+    except Exception as e:
+        print("[OTP DB Save Error]:", e)
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
+
+
+def verify_otp_db(key_identifier, entered, keep_on_success=False):
+    key = str(key_identifier).strip().lower()
+    entered_str = str(entered).strip()
+    conn = None
+    cur = None
+    try:
+        conn = get_db()
+        cur = conn.cursor(pymysql.cursors.DictCursor)
+        cur.execute("SELECT otp, expires_at, attempts FROM otp_verifications WHERE email = %s", (key,))
+        row = cur.fetchone()
+        
+        if not row:
+            return False, "OTP not found or expired"
+            
+        exp_dt = row["expires_at"]
+        if isinstance(exp_dt, str):
+            exp_dt = datetime.strptime(exp_dt, "%Y-%m-%d %H:%M:%S")
+        if exp_dt.tzinfo is None:
+            exp_dt = IST.localize(exp_dt)
+            
+        now_ist = datetime.now(IST)
+        if now_ist > exp_dt:
+            cur.execute("DELETE FROM otp_verifications WHERE email = %s", (key,))
+            conn.commit()
+            return False, "OTP expired"
+            
+        if row["attempts"] >= MAX_ATTEMPTS:
+            cur.execute("DELETE FROM otp_verifications WHERE email = %s", (key,))
+            conn.commit()
+            return False, "Maximum attempts exceeded. Please request a new OTP."
+            
+        if entered_str == str(row["otp"]).strip():
+            if not keep_on_success:
+                cur.execute("DELETE FROM otp_verifications WHERE email = %s", (key,))
+                conn.commit()
+            return True, "OTP verified"
+            
+        cur.execute("UPDATE otp_verifications SET attempts = attempts + 1 WHERE email = %s", (key,))
+        conn.commit()
+        return False, "Invalid OTP"
+    except Exception as e:
+        print("[OTP DB Verify Error]:", e)
+        return False, "Internal server error"
+    finally:
+        if cur:
+            cur.close()
+        if conn:
+            conn.close()
 
 
 def generate_otp():
@@ -256,20 +326,12 @@ def generate_otp():
 
 def send_otp_email_only(email):
     otp = generate_otp()
-    expires_at = datetime.utcnow() + timedelta(seconds=OTP_TTL_SECONDS)
-
-
-    otp_store[email.lower()] = {
-        "otp": otp,
-        "expires_at": expires_at,
-        "attempts": 0
-    }
+    save_otp_db(email, otp, OTP_TTL_SECONDS)
 
     html = load_html_template(
         "otp_template.html",
         otp=otp,
         year = datetime.now().year
-
     )
 
     send_email_smtp(
@@ -282,29 +344,7 @@ def send_otp_email_only(email):
 
 
 def verify_otp(email, entered):
-    key = email.lower()
-
-    if key not in otp_store:
-        return False, "No OTP found"
-
-    entry = otp_store[key]
-
-    if datetime.utcnow() > entry["expires_at"]:
-
-        del otp_store[key]
-        return False, "OTP expired"
-
-    if entry["attempts"] >= MAX_ATTEMPTS:
-        del otp_store[key]
-        return False, "Maximum attempts exceeded"
-
-    entry["attempts"] += 1
-
-    if str(entered).strip() == entry["otp"]:
-        del otp_store[key]
-        return True, "OTP verified"
-
-    return False, "Invalid OTP"
+    return verify_otp_db(email, entered)
 
 # ============================================================
 # SEND OTP
@@ -805,19 +845,8 @@ def forgot_password():
     # OTP generation (AFTER DB is closed)
     # -------------------------------------------------
     otp = str(random.randint(100000, 999999))
-    expires = datetime.utcnow() + timedelta(seconds=FORGOT_OTP_TTL)
-
-    # Store keyed by string uid - verify_forgot_otp/reset_password both
-    # look this up via str(data.get("uid")), but `uid` here comes back
-    # from the DB as a native int, so an unconverted int key would never
-    # match those string lookups and every verification would fail with
-    # "OTP not requested or expired" regardless of timing.
-    forgot_otp_store[str(uid)] = {
-        "otp": otp,
-        "expires": expires,
-        "verified": False,
-        "attempts": 0
-    }
+    save_otp_db(str(uid), otp, FORGOT_OTP_TTL)
+    save_otp_db(email, otp, FORGOT_OTP_TTL)
 
     html = load_html_template(
         "forgototp.html",
@@ -835,9 +864,6 @@ def forgot_password():
             html
         )
     except Exception as e:
-        # ❌ Remove OTP if email fails
-        forgot_otp_store.pop(str(uid), None)
-
         print("FORGOT OTP EMAIL ERROR:", repr(e))
         return jsonify({
             "error": "Failed to send OTP email. Please try again later."
@@ -903,8 +929,6 @@ def send_email_with_attachment(to_email, subject, html_body, attachment_bytes, f
 
 
 def send_email_with_attachments(to_email, subject, html_body, attachments):
-    # attachments: list of (bytes, filename) tuples - Brevo's API already
-    # accepts a list here, one email can carry several files.
     api_key = os.getenv("BREVO_API_KEY") or os.getenv("ADMIN_KEY")
     if not api_key:
         raise Exception("BREVO_API_KEY or ADMIN_KEY not set")
@@ -951,29 +975,9 @@ def verify_forgot_otp():
     if not uid or not otp:
         return jsonify({"error": "UID and OTP required"}), 400
 
-    entry = forgot_otp_store.get(uid)
-
-    if not entry:
-        return jsonify({"error": "OTP not requested or expired"}), 400
-
-    if entry.get("verified"):
-        return jsonify({"error": "OTP already used"}), 400
-
-    if datetime.utcnow() > entry["expires"]:
-        del forgot_otp_store[uid]
-        return jsonify({"error": "OTP expired"}), 400
-
-    if entry.get("attempts", 0) >= MAX_ATTEMPTS:
-        del forgot_otp_store[uid]
-        return jsonify({"error": "Maximum attempts exceeded. Please request a new OTP."}), 400
-
-    entry["attempts"] = entry.get("attempts", 0) + 1
-
-    if otp != entry["otp"]:
-        return jsonify({"error": "Invalid OTP"}), 400
-
-    # ✅ Mark OTP as used
-    entry["verified"] = True
+    ok, msg = verify_otp_db(uid, otp, keep_on_success=True)
+    if not ok:
+        return jsonify({"error": msg}), 400
 
     return jsonify({"message": "OTP verified"}), 200
 
@@ -3719,12 +3723,7 @@ def admin_login():
     # 🔒 Admin (SUPER_ADMIN, ADMIN) & HOD logins require OTP
     if role in ("SUPER_ADMIN", "ADMIN", "HOD"):
         otp = generate_otp_admin()
-        now_utc = datetime.utcnow()
-        admin_login_otp_store[email] = {
-            "otp": otp,
-            "expires_at": now_utc + timedelta(minutes=5),
-            "attempts": 0
-        }
+        save_otp_db(email, otp, 300)
         send_otp_email(
             email, otp,
             name=admin["name"],
@@ -3776,23 +3775,9 @@ def verify_admin_login_otp():
     if not email or not otp:
         return jsonify({"error": "Email and OTP required"}), 400
 
-    record = admin_login_otp_store.get(email)
-
-    if not record:
-        return jsonify({"error": "OTP not found or expired"}), 400
-
-    if datetime.utcnow() > record["expires_at"]:
-        del admin_login_otp_store[email]
-        return jsonify({"error": "OTP expired"}), 400
-
-    if record.get("attempts", 0) >= MAX_ATTEMPTS:
-        del admin_login_otp_store[email]
-        return jsonify({"error": "Maximum attempts exceeded. Please log in again."}), 400
-
-    record["attempts"] = record.get("attempts", 0) + 1
-
-    if record["otp"] != otp:
-        return jsonify({"error": "Invalid OTP"}), 400
+    ok, msg = verify_otp_db(email, otp)
+    if not ok:
+        return jsonify({"error": msg}), 400
 
     # 🔑 Fetch admin
     db = get_db()
@@ -3990,16 +3975,7 @@ def admin_resend_otp():
 
     # 🔄 Generate NEW OTP
     otp = generate_otp_admin()
-    now_ist = datetime.now(IST)
-    expires_at = now_ist + timedelta(minutes=ADMIN_OTP_VALID_MINUTES)
-
-    # 🔥 Overwrite previous OTP (safe)
-    admin_otp_store[email] = {
-        "otp": otp,
-        "expires_at": expires_at,
-        "verified": False,
-        "attempts": 0
-    }
+    save_otp_db(email, otp, ADMIN_OTP_VALID_MINUTES * 60)
 
     send_otp_email(
         email, otp,
@@ -4042,15 +4018,7 @@ def admin_forgot_password():
         return jsonify({"error": "Admin email not found"}), 404
 
     otp = generate_otp_admin()
-    now_ist = datetime.now(IST)
-    expires_at = now_ist + timedelta(minutes=ADMIN_OTP_VALID_MINUTES)
-
-    admin_otp_store[email] = {
-        "otp": otp,
-        "expires_at": expires_at,
-        "verified": False,
-        "attempts": 0
-    }
+    save_otp_db(email, otp, ADMIN_OTP_VALID_MINUTES * 60)
 
     send_otp_email(
         email, otp,
@@ -4070,24 +4038,13 @@ def admin_verify_otp():
     email = data.get("email")
     otp = data.get("otp")
 
-    entry = admin_otp_store.get(email)
-    if not entry:
-        return jsonify({"error": "OTP not requested"}), 400
+    if not email or not otp:
+        return jsonify({"error": "Email and OTP required"}), 400
 
-    if datetime.now(IST) > entry["expires_at"]:
-        del admin_otp_store[email]
-        return jsonify({"error": "OTP expired"}), 400
+    ok, msg = verify_otp_db(email, otp, keep_on_success=True)
+    if not ok:
+        return jsonify({"error": msg}), 400
 
-    if entry.get("attempts", 0) >= MAX_ATTEMPTS:
-        del admin_otp_store[email]
-        return jsonify({"error": "Maximum attempts exceeded. Please request a new OTP."}), 400
-
-    entry["attempts"] = entry.get("attempts", 0) + 1
-
-    if otp != entry["otp"]:
-        return jsonify({"error": "Invalid OTP"}), 400
-
-    entry["verified"] = True
     return jsonify({"success": True, "message": "OTP verified"}), 200
 
 # ============================================================
@@ -4099,9 +4056,8 @@ def admin_reset_password():
     email = data.get("email")
     new_password = data.get("new_password")
 
-    entry = admin_otp_store.get(email)
-    if not entry or not entry.get("verified"):
-        return jsonify({"error": "OTP not verified"}), 400
+    if not email or not new_password:
+        return jsonify({"error": "Email and new password required"}), 400
 
     is_valid, pw_msg = validate_password_strength(new_password)
     if not is_valid:
@@ -4119,14 +4075,18 @@ def admin_reset_password():
             "UPDATE admins SET password_hash=%s WHERE email=%s",
             (hashed, email)
         )
+        db.commit()
+
+        cur.execute("DELETE FROM otp_verifications WHERE email = %s", (email.lower(),))
+        db.commit()
 
     finally:
         if cur:
             cur.close()
         if db:
-            db.close()   # 🔥 return to pool
+            db.close()
 
-    del admin_otp_store[email]
+    return jsonify({"success": True, "message": "Password reset successful"}), 200
 
     return jsonify({"success": True, "message": "Password reset successful"}), 200
 
