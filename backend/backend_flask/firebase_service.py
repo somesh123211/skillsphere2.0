@@ -20,9 +20,27 @@ def init_firebase():
     env_json = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
     if env_json:
         try:
-            cert_dict = json.loads(env_json)
-            if "private_key" in cert_dict and isinstance(cert_dict["private_key"], str):
-                cert_dict["private_key"] = cert_dict["private_key"].replace("\\n", "\n")
+            raw_str = env_json.strip()
+            if (raw_str.startswith("'") and raw_str.endswith("'")) or (raw_str.startswith('"') and raw_str.endswith('"')):
+                raw_str = raw_str[1:-1].strip()
+            
+            try:
+                cert_dict = json.loads(raw_str)
+            except Exception:
+                # Fallback: try base64 decoding if user pasted base64
+                import base64
+                decoded_bytes = base64.b64decode(raw_str)
+                cert_dict = json.loads(decoded_bytes.decode('utf-8'))
+                
+            if isinstance(cert_dict, str):
+                cert_dict = json.loads(cert_dict)
+                
+            if isinstance(cert_dict, dict) and "private_key" in cert_dict:
+                pk = cert_dict["private_key"]
+                if isinstance(pk, str):
+                    pk = pk.replace("\\n", "\n").replace("\r\n", "\n")
+                    cert_dict["private_key"] = pk
+                    
             cred = credentials.Certificate(cert_dict)
             firebase_admin.initialize_app(cred)
             _firebase_initialized = True
