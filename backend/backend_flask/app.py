@@ -6447,6 +6447,12 @@ def check_and_send_scheduled_notifications():
                         if unattempted_uids:
                             notify_quiz_expiring_soon(year, dept, subj, unattempted_uids)
 
+                # Type 4: Answer Key Released (Triggered as soon as quiz ends)
+                if now_ist >= end_dt:
+                    fac_ans_key = f"fac_ans_released_{fq['quiz_id']}_{today_date}"
+                    if try_acquire_notification_lock(fac_ans_key):
+                        notify_answer_key_released(year=year, department=dept, quiz_title=subj)
+
         cur.close()
         conn.close()
     except Exception as e:
