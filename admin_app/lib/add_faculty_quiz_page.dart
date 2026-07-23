@@ -708,19 +708,19 @@ class _AddFacultyQuizPageState extends State<AddFacultyQuizPage> {
                       ),
                       const SizedBox(height: 12),
                       Text(
-                        selectedCsvFileName ?? "Tap to Select CSV File",
+                        csvFileName ?? "Tap to Select CSV File",
                         style: TextStyle(
-                          color: selectedCsvFileName != null
+                          color: csvFileName != null
                               ? AurumColors.accentGold
                               : AurumColors.textWhite,
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      if (selectedCsvFileName != null) ...[
+                      if (csvFileName != null) ...[
                         const SizedBox(height: 6),
                         Text(
-                          "${parsedCsvQuestions.length} questions parsed",
+                          "$csvRowCount questions parsed",
                           style: const TextStyle(
                             color: AurumColors.textGrey,
                             fontSize: 13,
@@ -737,6 +737,7 @@ class _AddFacultyQuizPageState extends State<AddFacultyQuizPage> {
               width: double.infinity,
               height: 50,
               child: OutlinedButton.icon(
+                onPressed: (csvFileName == null || checkingCsv) ? null : checkCsv,
                 style: OutlinedButton.styleFrom(
                   side: const BorderSide(color: AurumColors.accentGold),
                   shape: RoundedRectangleBorder(

@@ -347,16 +347,24 @@ def verify_otp(email, entered):
 # ============================================================
 # SEND OTP
 # ============================================================
+# ============================================================
+# SEND OTP
+# ============================================================
 @app.route("/send_otp", methods=["POST"])
 def send_otp():
-    data = request.get_json()
+    data = request.get_json() or {}
     email = data.get("email")
 
     if not email:
         return jsonify({"success": False, "message": "Email required"}), 400
 
-    send_otp_email_only(email)
-    return jsonify({"success": True, "message": "OTP sent"}), 200
+    try:
+        send_otp_email_only(email)
+        return jsonify({"success": True, "message": "OTP sent"}), 200
+    except Exception as e:
+        print("[send_otp error]:", repr(e))
+        return jsonify({"success": False, "message": f"Failed to send OTP email: {str(e)}"}), 500
+
 
 # ============================================================
 # PUBLIC DEPARTMENTS FOR SIGNUP
@@ -421,8 +429,8 @@ def verify_otp_and_signup():
         if not is_valid:
             return jsonify({"success": False, "message": pw_msg}), 400
 
-        # 🔐 Verify OTP first (no DB yet)
-        ok, msg = verify_otp(data["email"], data["otp"])
+        # 🔐 Verify OTP first (keep OTP in DB so validation errors don't destroy it)
+        ok, msg = verify_otp_db(data["email"], data["otp"], keep_on_success=True)
         if not ok:
             return jsonify({"success": False, "message": msg}), 400
 
@@ -484,6 +492,7 @@ def verify_otp_and_signup():
             )
         )
 
+        cur.execute("DELETE FROM otp_verifications WHERE email = %s", (data["email"].strip().lower(),))
         conn.commit()
 
         return jsonify({
