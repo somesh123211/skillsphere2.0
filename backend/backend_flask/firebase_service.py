@@ -143,17 +143,36 @@ def send_fcm_notification(fcm_tokens, title, body, data=None):
     return total_sent
 
 
+def format_time_str(time_str):
+    if not time_str or not isinstance(time_str, str):
+        return time_str
+    try:
+        parts = time_str.split(':')
+        if len(parts) >= 2:
+            hh = int(parts[0])
+            mm = int(parts[1])
+            ampm = "AM" if hh < 12 else "PM"
+            hh12 = hh % 12
+            if hh12 == 0:
+                hh12 = 12
+            return f"{hh12:02d}:{mm:02d} {ampm}"
+    except Exception:
+        pass
+    return time_str
+
+
 # 📢 TYPE 1: Quiz Published (Daily & Faculty)
 def notify_quiz_published(year, department, subject_name, start_time_str, is_faculty_quiz=False, quiz_title=None):
     tokens = get_student_fcm_tokens(year, department)
     if not tokens:
         return
+    formatted_start = format_time_str(start_time_str)
     if is_faculty_quiz:
-        title = "📌 New Faculty Quiz Published!"
-        body = f"'{quiz_title or subject_name}' for {subject_name} is published. Scheduled start: {start_time_str}."
+        title = "📚 New Faculty Quiz Published"
+        body = f"'{quiz_title or subject_name}' ({subject_name}) is published! Starts at {formatted_start}."
     else:
-        title = "📌 New Daily Quiz Scheduled!"
-        body = f"Daily Quiz for {subject_name} (Year {year}) is scheduled for {start_time_str}."
+        title = "📚 New Daily Quiz Published"
+        body = f"{subject_name} quiz is scheduled for today at {formatted_start}. Get ready!"
     
     send_fcm_notification(tokens, title, body, data={"type": "quiz_published", "year": str(year)})
 
@@ -163,8 +182,8 @@ def notify_quiz_started(year, department, subject_name):
     tokens = get_student_fcm_tokens(year, department)
     if not tokens:
         return
-    title = "🚀 Quiz is Now LIVE!"
-    body = f"{subject_name} quiz is now active. Tap to open SkillSphere and attempt."
+    title = "🚀 Quiz is Live Now!"
+    body = f"{subject_name} quiz has started! Open SkillSphere to attempt your quiz."
     send_fcm_notification(tokens, title, body, data={"type": "quiz_started", "year": str(year)})
 
 
@@ -173,8 +192,8 @@ def notify_quiz_expiring_soon(year, department, subject_name, unattempted_uids):
     tokens = get_student_fcm_tokens_by_uids(unattempted_uids)
     if not tokens:
         return
-    title = "⚠️ 10 Minutes Remaining!"
-    body = f"Hurry! Only 10 minutes left to attempt the {subject_name} quiz."
+    title = "⏰ 10 Minutes Remaining!"
+    body = f"You have not attempted the {subject_name} quiz yet. Only 10 minutes left!"
     send_fcm_notification(tokens, title, body, data={"type": "quiz_expiring_soon", "year": str(year)})
 
 
@@ -183,8 +202,8 @@ def notify_answer_key_released(year, department, quiz_title):
     tokens = get_student_fcm_tokens(year, department)
     if not tokens:
         return
-    title = "📝 Answer Key Released!"
-    body = f"Answer key & detailed solutions released for '{quiz_title}'."
+    title = "📝 Quiz Answers Released"
+    body = f"Answer key & results for '{quiz_title}' are now available in SkillSphere."
     send_fcm_notification(tokens, title, body, data={"type": "answer_key_released", "year": str(year)})
 
 
@@ -193,6 +212,8 @@ def notify_quiz_time_updated(year, department, subject_name, start_time_str, end
     tokens = get_student_fcm_tokens(year, department)
     if not tokens:
         return
-    title = "🔄 Quiz Timing Updated!"
-    body = f"Quiz timing updated for {subject_name}: Start {start_time_str}, End {end_time_str}."
+    formatted_start = format_time_str(start_time_str)
+    formatted_end = format_time_str(end_time_str)
+    title = "⏳ Quiz Timing Updated"
+    body = f"{subject_name} quiz timing has been updated to {formatted_start} - {formatted_end}."
     send_fcm_notification(tokens, title, body, data={"type": "time_updated", "year": str(year)})
