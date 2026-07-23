@@ -6526,7 +6526,7 @@ def _validate_faculty_quiz_csv(file_storage):
     Returns (rows, errors) - rows is a list of cleaned dicts ready to
     insert when errors is empty; otherwise rows is None."""
     try:
-        csv_file = TextIOWrapper(file_storage.stream, encoding="utf-8-sig")
+        csv_file = io.TextIOWrapper(file_storage.stream, encoding="utf-8-sig")
         reader = csv.DictReader(csv_file)
     except Exception as e:
         return None, [f"Could not read CSV file: {e}"]
@@ -6592,6 +6592,13 @@ def validate_faculty_quiz_csv_route(admin):
     rows, errors = _validate_faculty_quiz_csv(file)
     if errors:
         return jsonify({"success": False, "error": "CSV validation failed", "details": errors}), 400
+
+    return jsonify({
+        "success": True,
+        "message": "CSV validation successful",
+        "total_questions": len(rows),
+        "questions": rows
+    }), 200
 
 def send_sample_csv_email(recipient_email, recipient_name="Faculty"):
     sample_csv_content = """question,option_a,option_b,option_c,option_d,correct_option
