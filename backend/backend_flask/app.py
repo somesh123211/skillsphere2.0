@@ -115,7 +115,7 @@ if not GOOGLE_API_KEY:
 genai.configure(api_key=GOOGLE_API_KEY)
 
 # Load rotation keys
-GEMINI_KEYS = [
+RAW_GEMINI_KEYS = [
     GOOGLE_API_KEY,
     os.getenv("GOOGLE_API_KEY_1"),
     os.getenv("GOOGLE_API_KEY_2"),
@@ -123,7 +123,11 @@ GEMINI_KEYS = [
     os.getenv("GOOGLE_API_KEY_4"),
     os.getenv("GOOGLE_API_KEY_5")
 ]
-GEMINI_KEYS = [k for k in GEMINI_KEYS if k]
+# Exclude known invalid/revoked keys (like AIzaSyDDwYf53ND-W_04oY1Gg56Qv45cCOw)
+GEMINI_KEYS = [
+    k.strip() for k in RAW_GEMINI_KEYS
+    if k and k.strip() and not k.strip().startswith("AIzaSyDDwY")
+]
 
 MYSQL_CONFIG = {
     "host": os.getenv("MYSQL_HOST"),
