@@ -16,10 +16,10 @@ from dbutils.pooled_db import PooledDB
 # ------------------------------------------------------------------
 pool = PooledDB(
     creator=pymysql,
-    maxconnections=30,      # Max total connections for 30 generation threads
-    mincached=1,            # Do NOT pre-create connections (safe startup)
-    maxcached=2,            # Max idle connections
-    blocking=True,          # Wait if pool is exhausted
+    maxconnections=8,       # Strictly capped at 8 (MySQL host max_user_connections = 10)
+    mincached=1,            # Safe startup connection
+    maxcached=4,            # Reuse up to 4 idle connections
+    blocking=True,          # Safely wait in memory if pool is temporarily full
     ping=1,                 # Check (and silently reconnect) a cursored
                              # connection before use - without this, an idle
                              # pooled connection that MySQL has since dropped
