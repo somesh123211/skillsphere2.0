@@ -11,6 +11,7 @@ from functools import wraps
 from firebase_service import (
     notify_quiz_published,
     notify_quiz_started,
+    notify_quiz_starting_soon,
     notify_quiz_expiring_soon,
     notify_answer_key_released,
     notify_quiz_time_updated,
@@ -2086,6 +2087,9 @@ def update_fcm_token(current_user):
             
         conn = get_db()
         cur = conn.cursor()
+        # Unbind token from any previous student accounts on this physical device
+        cur.execute("UPDATE students SET fcm_token = NULL WHERE fcm_token = %s AND uid != %s", (fcm_token, uid))
+        # Bind token to the currently active logged-in student
         cur.execute("UPDATE students SET fcm_token = %s WHERE uid = %s", (fcm_token, uid))
         conn.commit()
         return jsonify({"message": "FCM token updated successfully", "status": "success"}), 200
@@ -6353,7 +6357,7 @@ def check_and_send_scheduled_notifications():
                         if try_acquire_notification_lock(started_key):
                             notify_quiz_started(year, dept, subj)
                     
-                    # Type 3: 10 Minutes Before Quiz Starts (Unattempted Reminder)
+                    # Type 6: 10 Minutes Before Quiz Starts
                     rem_start_diff = (start_dt - now_ist).total_seconds() / 60.0
                     if 0.0 <= rem_start_diff <= 10.5:
                         start_rem_key = f"daily_start_rem_{year}_{q['id']}_{today_date}"
@@ -6371,7 +6375,7 @@ def check_and_send_scheduled_notifications():
                             )
                             unattempted_uids = [r["uid"] for r in cur.fetchall()]
                             if unattempted_uids:
-                                notify_quiz_expiring_soon(year, dept, subj, unattempted_uids)
+                                notify_quiz_starting_soon(year, dept, subj, unattempted_uids)
 
                 # Type 3: 10 Minutes Before Quiz Ends (Unattempted Reminder)
                 end_dt = _parse_quiz_dt_safe(today_date, q.get("quiz_end_time"))
@@ -6429,7 +6433,7 @@ def check_and_send_scheduled_notifications():
                         )
                         unattempted_uids = [r["uid"] for r in cur.fetchall()]
                         if unattempted_uids:
-                            notify_quiz_expiring_soon(year, dept, subj, unattempted_uids)
+                            notify_quiz_starting_soon(year, dept, subj, unattempted_uids)
 
             end_dt = _parse_quiz_dt_safe(today_date, fq.get("quiz_end_time"))
             if end_dt:

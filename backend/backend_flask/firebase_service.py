@@ -77,16 +77,16 @@ def get_student_fcm_tokens(year=None, department=None):
         params = []
         
         if year:
-            query += " AND year = %s"
-            params.append(year)
+            query += " AND CAST(year AS CHAR) = %s"
+            params.append(str(year).strip())
             
         if department and str(department).upper() != "ALL":
             dept_id = BRANCH_TO_DEPT_ID.get(department)
             if dept_id:
-                query += " AND (branch = %s OR dept_id = %s OR branch IS NULL)"
+                query += " AND (branch = %s OR dept_id = %s)"
                 params.extend([department, dept_id])
             else:
-                query += " AND (branch = %s OR branch IS NULL)"
+                query += " AND branch = %s"
                 params.append(department)
             
         cur.execute(query, tuple(params))
@@ -207,13 +207,23 @@ def notify_quiz_started(year, department, subject_name):
     send_fcm_notification(tokens, title, body, data={"type": "quiz_started", "year": str(year)})
 
 
-# ⚠️ TYPE 3: 10 Minutes Left (Unattempted Students Only)
+# ⏳ TYPE 6: 10 Minutes Before Quiz Starts
+def notify_quiz_starting_soon(year, department, subject_name, target_uids):
+    tokens = get_student_fcm_tokens_by_uids(target_uids)
+    if not tokens:
+        return
+    title = "⏳ Quiz Starting in 10 Minutes!"
+    body = f"{subject_name} quiz starts in 10 minutes! Get ready to attempt."
+    send_fcm_notification(tokens, title, body, data={"type": "quiz_starting_soon", "year": str(year)})
+
+
+# ⚠️ TYPE 3: 10 Minutes Before Quiz Ends (Unattempted Students Only)
 def notify_quiz_expiring_soon(year, department, subject_name, unattempted_uids):
     tokens = get_student_fcm_tokens_by_uids(unattempted_uids)
     if not tokens:
         return
     title = "⏰ 10 Minutes Remaining!"
-    body = f"You have not attempted the {subject_name} quiz yet. Only 10 minutes left!"
+    body = f"You have not attempted the {subject_name} quiz yet. Only 10 minutes left before it closes!"
     send_fcm_notification(tokens, title, body, data={"type": "quiz_expiring_soon", "year": str(year)})
 
 
