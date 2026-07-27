@@ -1812,14 +1812,18 @@ def daily_quiz(current_user):
             "message": "No quiz today"
         }), 404
 
+    q_list = questions["questions"] if isinstance(questions, dict) and "questions" in questions else (questions if isinstance(questions, list) else [])
+    rem_sec = questions.get("remaining_seconds", 600) if isinstance(questions, dict) else 600
+    dur_min = questions.get("duration_minutes", 10) if isinstance(questions, dict) else 10
+
     return jsonify({
         "success": True,
         "attempted": False,
         "quiz_date": today_ist().strftime("%Y-%m-%d"),
         "quiz_type": quiz_type,
-        "questions": questions["questions"],
-        "remaining_seconds": questions["remaining_seconds"],
-        "duration_minutes": questions["duration_minutes"]
+        "questions": q_list,
+        "remaining_seconds": rem_sec,
+        "duration_minutes": dur_min
     }), 200
 
 

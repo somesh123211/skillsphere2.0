@@ -1,52 +1,66 @@
-from locust import HttpUser, task, between, constant
+import random
+import jwt
+import datetime
+from locust import HttpUser, task, constant
 
-ADMIN_JWT = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhZG1pbl91aWQiOiJiZDExMGNjMi04NjJiLTQyODEtYjcxZS0zOGI4YWYxNjAxNWQiLCJ0eXBlIjoiYWRtaW4iLCJyb2xlIjoic3VwZXJfYWRtaW4iLCJkZXB0X2lkIjpudWxsLCJleHAiOjE4MTY0MjE5MTl9.DBu0OAiWEQA7V_dxiP1xk0-FDqOPz8Oqo7_GtK2NwNQ"
-STUDENT_JWT = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOjE1MSwiZW1haWwiOiJiYXB1ODc4NDhAZ21haWwuY29tIiwieWVhciI6IjIiLCJleHAiOjE4MTY0MjE5MTl9.wq3xC9A2b1DCoPqxr_OvtNW3nPQUDfpzRiKHggqnb9Q"
+# Import app's actual JWT SECRET_KEY to sign valid student tokens
+from app import SECRET_KEY
 
-class SkillSphereUser(HttpUser):
-    wait_time = constant(0)
+# Target live Render URL
+LIVE_HOST = "https://skillsphere-2-qanz.onrender.com"
+
+# Generate a pool of 50 student JWT tokens for realistic load simulation
+STUDENT_TOKENS = []
+for i in range(1001, 1051):
+    payload = {
+        "uid": i,
+        "email": f"student{i}@stvincentngp.edu.in",
+        "year": "3",
+        "branch": "AI",
+        "exp": datetime.datetime.utcnow() + datetime.timedelta(days=30)
+    }
+    t = jwt.encode(payload, SECRET_KEY, algorithm="HS256")
+    STUDENT_TOKENS.append(t)
+
+
+class HighConcurrencyQuizUser(HttpUser):
+    host = LIVE_HOST
+    wait_time = constant(0)  # Maximum throughput stress testing (0s delay)
 
     def on_start(self):
-        self.admin_headers = {
-            "Authorization": f"Bearer {ADMIN_JWT}"
-        }
+        token = random.choice(STUDENT_TOKENS)
         self.student_headers = {
-            "Authorization": f"Bearer {STUDENT_JWT}"
+            "Authorization": f"Bearer {token}"
         }
 
-    # ==============================
-    # 1. PUBLIC ENDPOINTS (Zero Auth)
-    # ==============================
-    @task(3)
-    def public_departments(self):
-        self.client.get("/api/public/departments", name="GET /api/public/departments")
-
-    # ==============================
-    # 2. STUDENT APP ENDPOINTS
-    # ==============================
-    @task(4)
-    def student_profile(self):
-        self.client.get("/get_student_profile", headers=self.student_headers, name="GET /get_student_profile")
-
-    @task(4)
-    def student_today_quizzes(self):
-        self.client.get("/api/profile/today/quizzes", headers=self.student_headers, name="GET /api/profile/today/quizzes")
-
-    @task(3)
-    def student_today_status(self):
+    @task(5)
+    def fetch_daily_quiz_status(self):
+        """Simulate student checking quiz status on dashboard"""
         self.client.get("/api/quiz/today/status", headers=self.student_headers, name="GET /api/quiz/today/status")
 
-    # ==============================
-    # 3. ADMIN DASHBOARD ENDPOINTS
-    # ==============================
-    @task(3)
-    def admin_students_list(self):
-        self.client.get("/api/admin/students?year=2", headers=self.admin_headers, name="GET /api/admin/students?year=2")
+    @task(10)
+    def fetch_daily_quiz_cached(self):
+        """Simulate instant RAM cache quiz retrieval (Quiz ID 30)"""
+        self.client.get("/daily_quiz?quiz_id=30", headers=self.student_headers, name="GET /daily_quiz (RAM Cache)")
 
     @task(3)
-    def admin_faculty_quizzes(self):
-        self.client.get("/api/admin/faculty-quiz/list", headers=self.admin_headers, name="GET /api/admin/faculty-quiz/list")
+    def submit_daily_quiz_batch(self):
+        """Simulate single-batch SQL quiz submission"""
+        payload = {
+            "quiz_id": 30,
+            "time_taken_seconds": random.randint(120, 300),
+            "answers": [
+                {"question_id": 498 + i, "selected_answer": random.choice(["A", "B", "C", "D"])}
+                for i in range(10)
+            ]
+        }
+        with self.client.post("/api/quiz/submit", json=payload, headers=self.student_headers, name="POST /api/quiz/submit (Batch SQL)", catch_response=True) as response:
+            if response.status_code in (200, 409):
+                response.success()
+            else:
+                response.failure(f"Unexpected status code: {response.status_code}")
 
     @task(2)
-    def admin_leaderboard(self):
-        self.client.get("/api/admin/leaderboard/daily?year=2&type=all", headers=self.admin_headers, name="GET /api/admin/leaderboard/daily")
+    def fetch_faculty_quiz_list(self):
+        """Simulate fetching faculty quiz list"""
+        self.client.get("/faculty_quiz/list", headers=self.student_headers, name="GET /faculty_quiz/list")
