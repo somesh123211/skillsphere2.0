@@ -38,7 +38,7 @@ class _DailyQuizPageState extends State<DailyQuizPage> with WidgetsBindingObserv
   // ================= INIT =================
   bool _wasBackgrounded = false;
   int _warningCount = 0;
-  static const int _maxWarnings = 2;
+  static const int _maxWarnings = 3;
 
   @override
   void initState() {
