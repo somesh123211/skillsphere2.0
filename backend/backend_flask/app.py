@@ -1240,7 +1240,87 @@ def load_questions_from_csv(uid, topic_name):
         return None
     except Exception as e:
         print(f"Error loading questions from CSV: {e}")
-        return None
+# ------------------------------------------------------------
+# IN-MEMORY QUIZ CACHE SYSTEM (Zero-Latency Concurrency Engine)
+# ------------------------------------------------------------
+QUIZ_QUESTIONS_CACHE = {}  # key -> list of question dicts
+QUIZ_METADATA_CACHE = {}   # key -> metadata dict
+
+import threading
+
+def warmup_quiz_cache():
+    """
+    Scans upcoming and active quizzes for today (Daily AI & Faculty Quizzes)
+    and pre-loads all question sets into Python RAM 2 minutes before start time.
+    """
+    try:
+        today_str = today_ist().strftime("%Y-%m-%d")
+        conn = get_db()
+        cur = conn.cursor(pymysql.cursors.DictCursor)
+
+        # 1. Warmup Daily Quizzes (Y1..Y4)
+        for y in range(1, 5):
+            topic_table = f"daily_quiz_topics_y{y}"
+            try:
+                cur.execute(
+                    f"SELECT id, subject, topic, department, duration_minutes, question_per_set, status, quiz_start_time, quiz_end_time FROM {topic_table} WHERE quiz_date = %s AND status = 'READY'",
+                    (today_str,)
+                )
+                topics = cur.fetchall()
+                for t in topics:
+                    qid = t['id']
+                    QUIZ_METADATA_CACHE[f"daily_meta_{y}_{qid}"] = t
+
+                    cur.execute(
+                        "SELECT set_number, question, option_a, option_b, option_c, option_d, correct_option FROM daily_quiz_questions_pregenerated WHERE quiz_id = %s",
+                        (qid,)
+                    )
+                    qs = cur.fetchall()
+                    if qs:
+                        QUIZ_QUESTIONS_CACHE[f"daily_qs_{qid}"] = qs
+            except Exception:
+                pass
+
+        # 2. Warmup Faculty Quizzes
+        try:
+            cur.execute(
+                "SELECT quiz_id, quiz_name, year, department, duration_minutes, quiz_start_time, quiz_end_time FROM faculty_quiz_master WHERE quiz_date = %s",
+                (today_str,)
+            )
+            fac_quizzes = cur.fetchall()
+            for fq in fac_quizzes:
+                qid = fq['quiz_id']
+                QUIZ_METADATA_CACHE[f"fac_meta_{qid}"] = fq
+
+                cur.execute(
+                    "SELECT id, question, option_a, option_b, option_c, option_d, correct_option FROM faculty_quiz_questions_new WHERE quiz_id = %s ORDER BY id",
+                    (qid,)
+                )
+                qs = cur.fetchall()
+                if qs:
+                    QUIZ_QUESTIONS_CACHE[f"fac_qs_{qid}"] = qs
+        except Exception:
+            pass
+
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print("[WARMUP CACHE ERROR]:", e)
+
+
+def _start_cache_warmup_worker():
+    def _worker():
+        while True:
+            try:
+                warmup_quiz_cache()
+            except Exception as e:
+                print("[CACHE WORKER ERROR]:", e)
+            time.sleep(30)
+
+    t = threading.Thread(target=_worker, daemon=True)
+    t.start()
+
+_start_cache_warmup_worker()
 
 
 def get_daily_quiz(year, quiz_type, uid, quiz_id=None):
@@ -1529,21 +1609,27 @@ def get_daily_quiz(year, quiz_type, uid, quiz_id=None):
                 )
             conn.commit()
 
-            cur.execute("""
-                SELECT question, option_a, option_b, option_c, option_d, correct_option
-                FROM daily_quiz_questions_pregenerated
-                WHERE quiz_id = %s AND set_number = %s
-            """, (quiz_id, allocated_set))
-            questions = cur.fetchall()
-            
-            if not questions:
-                # Fallback to any pregenerated questions for this specific quiz_id
+            cached_all = QUIZ_QUESTIONS_CACHE.get(f"daily_qs_{quiz_id}")
+            if cached_all:
+                questions = [q for q in cached_all if q.get("set_number") == allocated_set]
+                if not questions:
+                    questions = list(cached_all)
+            else:
                 cur.execute("""
-                    SELECT question, option_a, option_b, option_c, option_d, correct_option
+                    SELECT set_number, question, option_a, option_b, option_c, option_d, correct_option
                     FROM daily_quiz_questions_pregenerated
-                    WHERE quiz_id = %s
-                """, (quiz_id,))
+                    WHERE quiz_id = %s AND set_number = %s
+                """, (quiz_id, allocated_set))
                 questions = cur.fetchall()
+                if not questions:
+                    cur.execute("""
+                        SELECT set_number, question, option_a, option_b, option_c, option_d, correct_option
+                        FROM daily_quiz_questions_pregenerated
+                        WHERE quiz_id = %s
+                    """, (quiz_id,))
+                    questions = cur.fetchall()
+                if questions:
+                    QUIZ_QUESTIONS_CACHE[f"daily_qs_{quiz_id}"] = questions
 
             if not questions:
                 conn.rollback()
@@ -2247,6 +2333,7 @@ def submit_quiz(current_user):
         total_questions = len(correct_map)
 
         score = 0
+        batch_updates = []
 
         for a in answers:
             qid = a.get("question_id")
@@ -2256,18 +2343,20 @@ def submit_quiz(current_user):
                 continue
 
             qid = int(qid)
+            batch_updates.append((selected, qid, uid, today))
 
-            cur.execute(
+            if selected and selected == correct_map.get(qid):
+                score += 1
+
+        if batch_updates:
+            cur.executemany(
                 f"""
                 UPDATE {bank_table}
                 SET student_answer=%s
                 WHERE id=%s AND uid=%s AND quiz_date=%s
                 """,
-                (selected, qid, uid, today)
+                batch_updates
             )
-
-            if selected and selected == correct_map.get(qid):
-                score += 1
 
         # -------------------------------------------------
         # 🔐 FINAL SUBMIT
@@ -2813,17 +2902,24 @@ def faculty_quiz(current_user):
         duration_secs = int(quiz["duration_minutes"]) * 60
         remaining_seconds = max(0, min(duration_secs, duration_secs - int(elapsed)))
 
-        # 4️⃣ Fetch questions
-        cur.execute(
-            """
-            SELECT id, question, option_a, option_b, option_c, option_d
-            FROM faculty_quiz_questions_new
-            WHERE quiz_id=%s
-            ORDER BY id
-            """,
-            (quiz_id,),
-        )
-        rows = cur.fetchall()
+        # 4️⃣ Fetch questions (from RAM cache if available)
+        cached_qs = QUIZ_QUESTIONS_CACHE.get(f"fac_qs_{quiz_id}")
+        if cached_qs:
+            rows = [dict(q) for q in cached_qs]
+        else:
+            cur.execute(
+                """
+                SELECT id, question, option_a, option_b, option_c, option_d
+                FROM faculty_quiz_questions_new
+                WHERE quiz_id=%s
+                ORDER BY id
+                """,
+                (quiz_id,),
+            )
+            rows = cur.fetchall()
+            if rows:
+                QUIZ_QUESTIONS_CACHE[f"fac_qs_{quiz_id}"] = rows
+
         if not rows:
             return jsonify({
                 "success": False,
@@ -2955,6 +3051,7 @@ def assignment_submit(current_user):
             )
         """)
 
+        batch_inserts = []
         for a in answers:
             qid = a.get("question_id")
             selected = a.get("selected_answer")
@@ -2965,11 +3062,14 @@ def assignment_submit(current_user):
             if correct_map.get(qid) == selected:
                 score += 1
 
-            cur.execute("""
+            batch_inserts.append((uid, quiz_id, qid, selected))
+
+        if batch_inserts:
+            cur.executemany("""
                 INSERT INTO faculty_quiz_student_answers (uid, quiz_id, question_id, selected_answer)
                 VALUES (%s, %s, %s, %s)
                 ON DUPLICATE KEY UPDATE selected_answer = VALUES(selected_answer)
-            """, (uid, quiz_id, qid, selected))
+            """, batch_inserts)
 
         # 🧾 Store attempt
         cur.execute(
