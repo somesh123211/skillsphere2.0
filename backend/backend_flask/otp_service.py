@@ -49,7 +49,7 @@ def send_email_smtp(to_email, subject, html_body):
 
     msg = MIMEText(html_body, "html")
     msg["Subject"] = subject
-    msg["From"] = FROM_EMAIL
+    msg["From"] = f"Skill Sphere <{FROM_EMAIL}>"
     msg["To"] = to_email
 
     with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
