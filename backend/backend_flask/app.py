@@ -4997,18 +4997,37 @@ def insert_daily_quiz_topic(admin):
         # created_by is derived server-side from the authenticated caller
         # (never trust a client-supplied creator) so the Questions
         # Generated view can be scoped to "my quizzes only" below.
-        cur.execute(f"""
-            INSERT INTO {table}
-            (subject, topic, department, difficulty, status, total_students,
-             question_per_set, total_sets_required, generated_sets, generated_questions, failed_sets, quiz_date, total_questions, quiz_type,
-             quiz_start_time, quiz_end_time, duration_minutes, created_by)
-            VALUES (%s, %s, %s, %s, 'GENERATING', %s, %s, %s, 0, 0, 0, %s, %s, %s, %s, %s, %s, %s)
-        """, (
-            subject, topic, department, difficulty,
-            student_count, questions_per_student, total_sets,
-            quiz_date, questions_per_student, quiz_type,
-            quiz_start_time, quiz_end_time, duration_minutes, admin["email"]
-        ))
+        try:
+            cur.execute(f"""
+                INSERT INTO {table}
+                (subject, topic, department, difficulty, status, total_students,
+                 question_per_set, total_sets_required, generated_sets, generated_questions, failed_sets, quiz_date, total_questions, quiz_type,
+                 quiz_start_time, quiz_end_time, duration_minutes, created_by)
+                VALUES (%s, %s, %s, %s, 'GENERATING', %s, %s, %s, 0, 0, 0, %s, %s, %s, %s, %s, %s, %s)
+            """, (
+                subject, topic, department, difficulty,
+                student_count, questions_per_student, total_sets,
+                quiz_date, questions_per_student, quiz_type,
+                quiz_start_time, quiz_end_time, duration_minutes, admin["email"]
+            ))
+        except pymysql.err.DataError:
+            try:
+                cur.execute(f"ALTER TABLE {table} MODIFY COLUMN topic TEXT, MODIFY COLUMN subject VARCHAR(500), MODIFY COLUMN department VARCHAR(255)")
+                conn.commit()
+            except Exception:
+                pass
+            cur.execute(f"""
+                INSERT INTO {table}
+                (subject, topic, department, difficulty, status, total_students,
+                 question_per_set, total_sets_required, generated_sets, generated_questions, failed_sets, quiz_date, total_questions, quiz_type,
+                 quiz_start_time, quiz_end_time, duration_minutes, created_by)
+                VALUES (%s, %s, %s, %s, 'GENERATING', %s, %s, %s, 0, 0, 0, %s, %s, %s, %s, %s, %s, %s)
+            """, (
+                subject, topic, department, difficulty,
+                student_count, questions_per_student, total_sets,
+                quiz_date, questions_per_student, quiz_type,
+                quiz_start_time, quiz_end_time, duration_minutes, admin["email"]
+            ))
         quiz_id = cur.lastrowid
         conn.commit()
 
