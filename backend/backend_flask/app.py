@@ -1610,26 +1610,23 @@ def get_daily_quiz(year, quiz_type, uid, quiz_id=None):
             conn.commit()
 
             cached_all = QUIZ_QUESTIONS_CACHE.get(f"daily_qs_{quiz_id}")
-            if cached_all:
-                questions = [q for q in cached_all if q.get("set_number") == allocated_set]
-                if not questions:
-                    questions = list(cached_all)
-            else:
+            if not cached_all:
                 cur.execute("""
                     SELECT set_number, question, option_a, option_b, option_c, option_d, correct_option
                     FROM daily_quiz_questions_pregenerated
-                    WHERE quiz_id = %s AND set_number = %s
-                """, (quiz_id, allocated_set))
-                questions = cur.fetchall()
+                    WHERE quiz_id = %s
+                """, (quiz_id,))
+                cached_all = cur.fetchall()
+                if cached_all:
+                    QUIZ_QUESTIONS_CACHE[f"daily_qs_{quiz_id}"] = cached_all
+
+            if cached_all:
+                questions = [q for q in cached_all if q.get("set_number") == allocated_set]
                 if not questions:
-                    cur.execute("""
-                        SELECT set_number, question, option_a, option_b, option_c, option_d, correct_option
-                        FROM daily_quiz_questions_pregenerated
-                        WHERE quiz_id = %s
-                    """, (quiz_id,))
-                    questions = cur.fetchall()
-                if questions:
-                    QUIZ_QUESTIONS_CACHE[f"daily_qs_{quiz_id}"] = questions
+                    first_set = cached_all[0].get("set_number") if cached_all else None
+                    questions = [q for q in cached_all if q.get("set_number") == first_set] if first_set is not None else list(cached_all)
+            else:
+                questions = []
 
             if not questions:
                 conn.rollback()
